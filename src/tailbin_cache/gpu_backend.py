@@ -97,11 +97,14 @@ class CuPyComplexPGFGridEngine:
         cp = self.cp
         B = int(Q.shape[0])
         J = int(Q.shape[1])
-        out = cp.zeros((B, J), dtype=cp.complex128)
         # vals shape: B x E.  Scatter add along destination class kk.
         vals = Q[:, self.ii] * Q[:, self.jj] * self.ww[None, :]
-        cp.add.at(out, (self._row_index(B), self.kk[None, :]), vals)
-        return out
+        idx = (self._row_index(B), self.kk[None, :])
+        out_real = cp.zeros((B, J), dtype=cp.float64)
+        out_imag = cp.zeros((B, J), dtype=cp.float64)
+        cp.add.at(out_real, idx, vals.real.astype(cp.float64, copy=False))
+        cp.add.at(out_imag, idx, vals.imag.astype(cp.float64, copy=False))
+        return out_real + 1j * out_imag
 
     def _rhs(self, Q, z):
         p = self.params
