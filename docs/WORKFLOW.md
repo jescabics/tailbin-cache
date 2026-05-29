@@ -50,6 +50,10 @@ The current preferred direction is:
 
 Codex may edit files when asked, but commits should be made only after explicit user review and approval.
 
+## Local Validation Policy
+
+Codex may run lightweight local checks when dependencies already exist and the user has not forbidden them, such as `git diff --check`, targeted `pytest` files, `python -m compileall src tests`, and `python -m tailbin_cache.cli --help`. Codex should not run package installs, full test suites, heavy planners/builds, production HDF5 generation, O2/SLURM/SSH commands, or git add/commit/push unless explicitly requested.
+
 ## Related Documentation
 
 * [O2 Runbook](O2_RUNBOOK.md): O2-specific execution, resource-request, monitoring, and SLURM guidance.

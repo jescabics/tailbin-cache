@@ -105,7 +105,19 @@ Codex prompts should include:
 * intended next benchmark tier;
 * whether the change is docs-only, script-only, or source-code;
 * whether tests may be run locally;
+* which lightweight checks should be run or skipped;
 * explicit instruction not to commit unless requested.
+
+Lightweight local checks are allowed and useful when dependencies already exist, for example:
+
+* `git diff --check`
+* `python -m compileall src tests`
+* `python -m pytest tests/test_gpu_backend.py -q`
+* `python -m pytest tests/test_production_cli.py -q`
+* `python -m pytest tests/test_production_grid.py -q`
+* `python -m tailbin_cache.cli --help`
+
+Codex should not run O2, SLURM, SSH, package install, heavy planner/build, production HDF5, or full-suite test commands locally unless explicitly requested. O2/SLURM commands are run by the user on O2, then the resulting logs/accounting/bundles are sent back for analysis. Each iteration should report which checks were run and which were skipped.
 
 ## Standard Codex Prompt Skeleton
 
@@ -128,7 +140,7 @@ Rules:
 
 * Do not install packages unless explicitly asked.
 * Do not run O2/SLURM/SSH commands locally.
-* Do not run long tests.
+* Do not run long tests or the full test suite.
 * Do not use git add, git commit, or git push.
 * Keep generated outputs ignored.
 * Preserve O2 resource-efficiency rules.
@@ -142,6 +154,7 @@ After finishing, report:
 3. Git status.
 4. Diff summary.
 5. Any assumptions or follow-up commands needed.
+6. Lightweight checks run or skipped.
 ```
 
 ## Current Known Tailbin O2 State
@@ -150,8 +163,9 @@ After finishing, report:
 * Correct O2 Python stack: `module load gcc/14.2.0`, `module load python/3.13.1`
 * Project-local environment: `.venv_o2`
 * Old environment `/home/jae37/pythonEnv_3.10.11` is broken and should not be used.
-* O2 setup job `41873491` completed successfully.
-* CPU smoke job `41873738` completed successfully.
-* GPU audit job `41873739` failed because `cuda/11.7` was not an available module.
-* Collector job `41873740` completed and produced a result bundle.
-* Next likely task is CUDA module discovery and making the GPU audit script configurable instead of hard-coding `cuda/11.7`.
+* Commit `095935416df56f7e40a3357efcb0635d76da9313` completed the first O2 smoke/audit loop successfully.
+* CPU smoke job `41876802` completed successfully.
+* GPU audit job `41876804` completed successfully on a Tesla V100S with about `6.8x` GPU speedup and max relative CPU-vs-GPU error about `8.4e-08`.
+* Collector job `41876805` completed successfully and produced a result bundle.
+* The previous GPU failure was fixed by changing complex CuPy scatter-add into separate real/imaginary `float64` scatter-adds.
+* Next likely task is moving from smoke/audit into a small calibrated benchmark tier while keeping result bundles current-run focused.

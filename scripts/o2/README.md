@@ -67,6 +67,12 @@ Find result bundles:
 ls -lh results/*.tgz
 ```
 
+Result bundles are intended to contain current-run logs only: CPU smoke logs, GPU audit logs, and collector logs matched by the submitted job IDs. For deeper debugging, include all historical logs by setting:
+
+```bash
+INCLUDE_ALL_LOGS=1 bash scripts/o2/submit_smoke_audit.sh
+```
+
 ## Python Environment
 
 The O2 environment is repo-local at `.venv_o2/` and ignored by Git.
@@ -158,6 +164,8 @@ Generated files stay in ignored project directories:
 * `results/tailbin_o2_smoke_audit_<timestamp>.tgz`
 
 The collector bundles logs, selected outputs/results, O2 docs, example configs, git metadata, accounting output, and GPU monitor logs when present.
+
+By default, the collector only includes logs matching the current CPU, GPU, and collector job IDs. Set `INCLUDE_ALL_LOGS=1` to add the full `logs/` directory under `logs/all_logs/` inside the bundle.
 
 ## Retrieve The Bundle
 

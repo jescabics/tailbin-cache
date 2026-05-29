@@ -19,8 +19,19 @@ Repository rules:
 
 * Do not commit or push unless explicitly instructed.
 * Do not run O2, SLURM, or SSH commands locally.
-* Do not run long tests or heavy compute locally unless explicitly instructed.
+* Lightweight local validation is allowed when dependencies already exist and the user has not forbidden it. Useful checks include:
+  * `git diff --check`
+  * `python -m compileall src tests`
+  * `python -m pytest tests/test_gpu_backend.py -q`
+  * `python -m pytest tests/test_production_cli.py -q`
+  * `python -m pytest tests/test_production_grid.py -q`
+  * `python -m tailbin_cache.cli --help`
+* Do not install packages unless explicitly instructed.
+* Do not run the full test suite unless explicitly requested.
+* Do not run long tests, heavy planners/builds, production HDF5 cache generation, or heavy compute locally unless explicitly instructed.
+* Do not create HDF5 production outputs locally unless explicitly instructed.
 * Do not commit generated logs, outputs, results, HDF5 files, virtual environments, or bundles.
+* Do not use `git add`, `git commit`, or `git push` unless explicitly requested.
 * O2 resource requests must be measurement-driven.
 * O2 scripts must use SLURM for heavy work and avoid login-node compute.
 
