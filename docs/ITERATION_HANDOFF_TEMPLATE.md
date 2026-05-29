@@ -119,6 +119,8 @@ Lightweight local checks are allowed and useful when dependencies already exist,
 
 Codex should not run O2, SLURM, SSH, package install, heavy planner/build, production HDF5, or full-suite test commands locally unless explicitly requested. O2/SLURM commands are run by the user on O2, then the resulting logs/accounting/bundles are sent back for analysis. Each iteration should report which checks were run and which were skipped.
 
+Codex may commit and push only when the user explicitly authorizes commit/push in the current prompt. Before committing or pushing, Codex should run feasible lightweight local checks, at minimum `git diff --check` and `git status`. For docs/O2 script-only changes, committing and pushing after checks pass is acceptable when explicitly authorized. For `src/` or `tests/` changes, Codex should ask before pushing unless the prompt explicitly says to push source/test changes.
+
 ## Standard Codex Prompt Skeleton
 
 ```text
@@ -141,7 +143,7 @@ Rules:
 * Do not install packages unless explicitly asked.
 * Do not run O2/SLURM/SSH commands locally.
 * Do not run long tests or the full test suite.
-* Do not use git add, git commit, or git push.
+* Do not use git add, git commit, or git push unless explicitly authorized in this prompt.
 * Keep generated outputs ignored.
 * Preserve O2 resource-efficiency rules.
 
@@ -168,4 +170,5 @@ After finishing, report:
 * GPU audit job `41876804` completed successfully on a Tesla V100S with about `6.8x` GPU speedup and max relative CPU-vs-GPU error about `8.4e-08`.
 * Collector job `41876805` completed successfully and produced a result bundle.
 * The previous GPU failure was fixed by changing complex CuPy scatter-add into separate real/imaginary `float64` scatter-adds.
+* Collector bundles should include current-run logs and GPU monitor logs by default, selected by CPU/GPU/collector job IDs. Historical `logs/` files are included only with `INCLUDE_ALL_LOGS=1`, and historical GPU monitor logs should not be swept into normal smoke/audit bundles.
 * Next likely task is moving from smoke/audit into a small calibrated benchmark tier while keeping result bundles current-run focused.

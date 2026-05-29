@@ -141,20 +141,19 @@ fi
 
 copy_dir_contents_if_exists outputs/o2_smoke/plan "$bundle_dir/outputs/o2_smoke/plan"
 copy_dir_contents_if_exists results/o2_smoke "$bundle_dir/results/o2_smoke"
-copy_dir_contents_if_exists results/o2_gpu_audit "$bundle_dir/results/o2_gpu_audit"
+copy_file_if_exists results/o2_gpu_audit/gpu_audit_metadata.txt "$bundle_dir/results/o2_gpu_audit/gpu_audit_metadata.txt"
+copy_file_if_exists results/o2_gpu_audit/gpu_backend_audit.json "$bundle_dir/results/o2_gpu_audit/gpu_backend_audit.json"
+copy_file_if_exists results/o2_gpu_audit/nvidia_smi.txt "$bundle_dir/results/o2_gpu_audit/nvidia_smi.txt"
+
+if [ -n "${GPU_JOB_ID:-}" ] && [ -f "results/o2_gpu_audit/${GPU_JOB_ID}.gpulog" ]; then
+  copy_file_if_exists "results/o2_gpu_audit/${GPU_JOB_ID}.gpulog" "$bundle_dir/results/o2_gpu_audit/${GPU_JOB_ID}.gpulog"
+  copy_file_if_exists "results/o2_gpu_audit/${GPU_JOB_ID}.gpulog" "$bundle_dir/gpu_logs/current/${GPU_JOB_ID}.gpulog"
+else
+  echo "No current-run GPU monitor log found for GPU_JOB_ID=${GPU_JOB_ID:-unset}" > "$bundle_dir/gpu_logs/README.txt"
+fi
 
 collect_accounting "${CPU_JOB_ID:-}" "cpu_smoke"
 collect_accounting "${GPU_JOB_ID:-}" "gpu_audit"
-
-found_gpu_logs=0
-while IFS= read -r -d '' gpulog; do
-  found_gpu_logs=1
-  cp -a "$gpulog" "$bundle_dir/gpu_logs/$(basename "$gpulog")"
-done < <(find . -path "./results/tailbin_o2_smoke_audit_*" -prune -o -type f -name "*.gpulog" -print0)
-
-if [ "$found_gpu_logs" -eq 0 ]; then
-  echo "No *.gpulog files found." > "$bundle_dir/gpu_logs/README.txt"
-fi
 
 tar -czf "$bundle_path" -C results "$bundle_name"
 

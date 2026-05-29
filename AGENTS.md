@@ -17,7 +17,8 @@ Project roles:
 
 Repository rules:
 
-* Do not commit or push unless explicitly instructed.
+* Codex may commit and push only when the user explicitly authorizes commit/push in the current prompt.
+* Before committing or pushing, run feasible lightweight local checks, at minimum `git diff --check` and `git status`.
 * Do not run O2, SLURM, or SSH commands locally.
 * Lightweight local validation is allowed when dependencies already exist and the user has not forbidden it. Useful checks include:
   * `git diff --check`
@@ -31,7 +32,9 @@ Repository rules:
 * Do not run long tests, heavy planners/builds, production HDF5 cache generation, or heavy compute locally unless explicitly instructed.
 * Do not create HDF5 production outputs locally unless explicitly instructed.
 * Do not commit generated logs, outputs, results, HDF5 files, virtual environments, or bundles.
-* Do not use `git add`, `git commit`, or `git push` unless explicitly requested.
+* Do not use `git add`, `git commit`, or `git push` unless explicitly authorized in the current prompt.
+* For small docs/O2 script-only changes, Codex may commit and push after lightweight checks pass when explicitly authorized.
+* For `src/` or `tests/` changes, Codex should report what changed and either ask before pushing or push only if the prompt explicitly says to push source/test changes.
 * O2 resource requests must be measurement-driven.
 * O2 scripts must use SLURM for heavy work and avoid login-node compute.
 

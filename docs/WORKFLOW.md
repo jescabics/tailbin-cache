@@ -48,7 +48,7 @@ The current preferred direction is:
 
 ## Commit Policy
 
-Codex may edit files when asked, but commits should be made only after explicit user review and approval.
+Codex may edit files when asked. Codex may commit and push only when the user explicitly authorizes commit/push in the current prompt. Before committing or pushing, Codex should run feasible lightweight local checks, at minimum `git diff --check` and `git status`. For small docs/O2 script-only changes, Codex may commit and push after checks pass when explicitly authorized. For `src/` or `tests/` changes, Codex should ask before pushing unless the prompt explicitly says to push source/test changes.
 
 ## Local Validation Policy
 

@@ -67,7 +67,7 @@ Find result bundles:
 ls -lh results/*.tgz
 ```
 
-Result bundles are intended to contain current-run logs only: CPU smoke logs, GPU audit logs, and collector logs matched by the submitted job IDs. For deeper debugging, include all historical logs by setting:
+Result bundles are intended to contain current-run logs only: CPU smoke logs, GPU audit logs, and collector logs matched by the submitted job IDs. Current-run GPU monitor logs are selected by `GPU_JOB_ID`, using `results/o2_gpu_audit/${GPU_JOB_ID}.gpulog` when present. For deeper debugging, include all historical `logs/` files by setting:
 
 ```bash
 INCLUDE_ALL_LOGS=1 bash scripts/o2/submit_smoke_audit.sh
@@ -163,9 +163,9 @@ Generated files stay in ignored project directories:
 * `results/o2_gpu_audit/`
 * `results/tailbin_o2_smoke_audit_<timestamp>.tgz`
 
-The collector bundles logs, selected outputs/results, O2 docs, example configs, git metadata, accounting output, and GPU monitor logs when present.
+The collector bundles current-run logs, selected outputs/results, O2 docs, example configs, git metadata, accounting output, and the GPU monitor log matching `GPU_JOB_ID` when present.
 
-By default, the collector only includes logs matching the current CPU, GPU, and collector job IDs. Set `INCLUDE_ALL_LOGS=1` to add the full `logs/` directory under `logs/all_logs/` inside the bundle.
+By default, the collector only includes logs matching the current CPU, GPU, and collector job IDs. Set `INCLUDE_ALL_LOGS=1` to add the full `logs/` directory under `logs/all_logs/` inside the bundle. This does not sweep historical GPU monitor logs from `results/o2_gpu_audit/`; GPU monitor logs remain selected by `GPU_JOB_ID`.
 
 ## Retrieve The Bundle
 
