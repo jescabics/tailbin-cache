@@ -115,6 +115,7 @@ def select_representative_base_points(
         return []
     target = min(int(sample_size), len(points))
     selected: Dict[int, set[str]] = {}
+    selected_order: List[int] = []
 
     def add(point: Dict[str, Any], reason: str) -> None:
         idx = int(point["base_idx"])
@@ -122,6 +123,7 @@ def select_representative_base_points(
             selected[idx].add(reason)
         elif len(selected) < target:
             selected[idx] = {reason}
+            selected_order.append(idx)
 
     def add_positions(label: str, candidates: List[Dict[str, Any]], positions: Iterable[int]) -> None:
         if not candidates:
@@ -133,24 +135,28 @@ def select_representative_base_points(
     by_work = sorted(points, key=lambda p: (float(p.get("total_v04_node_work_proxy", 0)), int(p["base_idx"])))
     by_hard = list(reversed(by_work))
     by_full = sorted(points, key=lambda p: (int(p.get("n_full_tables", 0)), int(p.get("max_prefix_kmax", -1)), float(p.get("total_v04_node_work_proxy", 0)), -int(p["base_idx"])), reverse=True)
+    strategy = str(strategy)
 
-    # Reserve scientific boundaries before filling by work proxy so a modest
-    # sample cannot accidentally omit the age-diagonal endpoints.
-    for field in ("R", "N", "Tb"):
-        values = sorted({float(p[field]) for p in points if p.get(field) is not None})
-        if not values:
-            continue
-        for value, suffix in ((values[0], "low"), (values[-1], "high")):
-            subset = [p for p in points if p.get(field) is not None and abs(float(p[field]) - value) <= 1e-10]
+    if strategy == "easy_first":
+        add(by_work[0], "work_proxy_easiest")
+    else:
+        # Reserve scientific boundaries before filling by work proxy so a modest
+        # sample cannot accidentally omit the age-diagonal endpoints.
+        for field in ("R", "N", "Tb"):
+            values = sorted({float(p[field]) for p in points if p.get(field) is not None})
+            if not values:
+                continue
+            for value, suffix in ((values[0], "low"), (values[-1], "high")):
+                subset = [p for p in points if p.get(field) is not None and abs(float(p[field]) - value) <= 1e-10]
+                subset = sorted(subset, key=lambda p: (float(p.get("total_v04_node_work_proxy", 0)), int(p["base_idx"])))
+                add_positions(f"{field}_{suffix}_boundary", subset, _quantile_positions(len(subset), [0.0, 0.5, 1.0]))
+
+        tb_values = sorted({float(p["Tb"]) for p in points if p.get("Tb") is not None})
+        for pos in _quantile_positions(len(tb_values), [0.25, 0.50, 0.75]):
+            value = tb_values[pos]
+            subset = [p for p in points if p.get("Tb") is not None and abs(float(p["Tb"]) - value) <= 1e-10]
             subset = sorted(subset, key=lambda p: (float(p.get("total_v04_node_work_proxy", 0)), int(p["base_idx"])))
-            add_positions(f"{field}_{suffix}_boundary", subset, _quantile_positions(len(subset), [0.0, 0.5, 1.0]))
-
-    tb_values = sorted({float(p["Tb"]) for p in points if p.get("Tb") is not None})
-    for pos in _quantile_positions(len(tb_values), [0.25, 0.50, 0.75]):
-        value = tb_values[pos]
-        subset = [p for p in points if p.get("Tb") is not None and abs(float(p["Tb"]) - value) <= 1e-10]
-        subset = sorted(subset, key=lambda p: (float(p.get("total_v04_node_work_proxy", 0)), int(p["base_idx"])))
-        add_positions("Tb_intermediate", subset, _quantile_positions(len(subset), [0.5, 1.0]))
+            add_positions("Tb_intermediate", subset, _quantile_positions(len(subset), [0.5, 1.0]))
 
     # Explicit high-risk planner predictions.
     add_positions("planner_full_or_large_prefix", by_full, range(max(4, target // 6)))
@@ -172,12 +178,29 @@ def select_representative_base_points(
             break
         add(point, "hard_fill")
 
+    def order_bucket(idx: int) -> tuple[int, float, int]:
+        reasons = selected[idx]
+        point = next(p for p in points if int(p["base_idx"]) == idx)
+        work = float(point.get("total_v04_node_work_proxy", 0))
+        if strategy == "representative_hard_first":
+            return (0, -work, idx)
+        if "work_proxy_easiest" in reasons:
+            return (0, work, idx)
+        if "work_proxy_median" in reasons or "work_quantile_spread" in reasons:
+            return (1, work, idx)
+        if any("boundary" in reason or "intermediate" in reason for reason in reasons):
+            return (2, work, idx)
+        if "planner_full_or_large_prefix" in reasons or "work_proxy_hardest" in reasons or "hard_fill" in reasons:
+            return (3, work, idx)
+        return (4, work, idx)
+
+    ordered_indices = sorted(selected_order, key=order_bucket)
     selected_rows = []
-    for rank, idx in enumerate(sorted(selected)):
+    for rank, idx in enumerate(ordered_indices):
         point = dict(next(p for p in points if int(p["base_idx"]) == idx))
         point["selection_rank"] = int(rank)
         point["selection_reasons"] = ";".join(sorted(selected[idx]))
-        point["selection_strategy"] = str(strategy)
+        point["selection_strategy"] = strategy
         selected_rows.append(point)
     return selected_rows
 

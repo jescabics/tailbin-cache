@@ -47,6 +47,35 @@ def load_manifest(path: Path) -> list[dict[str, Any]]:
         return [dict(row) for row in csv.DictReader(f)]
 
 
+def load_progress(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in path.read_text(errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except Exception as exc:  # noqa: BLE001
+            rows.append({"parse_error": str(exc), "raw": line})
+    return rows
+
+
+def parse_key_value_file(path: Path) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not path.exists():
+        return out
+    for line in path.read_text(errors="replace").splitlines():
+        if ":" in line:
+            k, v = line.split(":", 1)
+            out[k.strip()] = v.strip()
+        elif "=" in line:
+            k, v = line.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
 def classify_points(manifest_rows: list[dict[str, Any]], build_summary: dict[str, Any]) -> list[dict[str, Any]]:
     base_rows = build_summary.get("base_rows") or []
     by_idx = {int(row.get("base_idx")): row for row in base_rows if row.get("base_idx") is not None}
@@ -133,6 +162,7 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
     lines.append(f"* Full Grid B base points planned: `{grid.get('base_points', 1000)}`")
     lines.append(f"* Full Grid B alpha tables planned: `{grid.get('alpha_tables', 20000)}`")
     lines.append(f"* Representative base points selected: `{summary.get('sample_size_selected')}`")
+    lines.append(f"* Build stage: `{summary.get('build_stage')}`")
     lines.append("")
     lines.append("## Timed Commands")
     lines.append("")
@@ -156,10 +186,20 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
     lines.append(f"* Shards: `{shard.get('n_shards')}`")
     lines.append(f"* Shard load imbalance: `{shard.get('load_imbalance_ratio')}`")
     lines.append(f"* Total node work proxy: `{shard.get('total_node_work_proxy')}`")
+    if not shard:
+        lines.append("* Shard planning: `skipped`")
     lines.append("")
     lines.append("## Representative Build")
     lines.append("")
     build = summary.get("build_summary", {})
+    build_info = summary.get("build_runtime", {})
+    lines.append(f"* RUN_GPU_BUILD: `{build_info.get('RUN_GPU_BUILD')}`")
+    lines.append(f"* Requested build backend: `{build.get('requested_pgf_backend')}`")
+    lines.append(f"* Actual build backend: `{build.get('actual_build_backend')}`")
+    lines.append(f"* CUDA module: `{build_info.get('CUDA module')}`")
+    lines.append(f"* CUDA_VISIBLE_DEVICES: `{build_info.get('CUDA_VISIBLE_DEVICES')}`")
+    lines.append(f"* CuPy version: `{build_info.get('cupy_version')}`")
+    lines.append(f"* GPU device: `{build_info.get('device_name')}`")
     lines.append(f"* Base points attempted: `{build.get('n_base_points_attempted')}`")
     lines.append(f"* Tables attempted: `{build.get('n_tables_attempted')}`")
     lines.append(f"* Tables written: `{build.get('n_tables_written')}`")
@@ -170,6 +210,11 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
     lines.append(f"* Mean/median/max seconds per base point: `{build.get('mean_seconds_per_base_point')}` / `{build.get('median_seconds_per_base_point')}` / `{build.get('max_seconds_per_base_point')}`")
     lines.append(f"* Output MB: `{build.get('output_mb')}`")
     lines.append(f"* Max z/CDF error indicators: `{build.get('max_total_z_error_indicator')}` / `{build.get('max_total_cdf_error_indicator')}`")
+    progress = summary.get("progress", {})
+    lines.append(f"* Progress file: `{progress.get('path')}`")
+    lines.append(f"* Progress events: `{progress.get('n_events')}`")
+    lines.append(f"* Completed base points in progress: `{progress.get('completed_base_points')}`")
+    lines.append(f"* Error events in progress: `{progress.get('error_events')}`")
     lines.append("")
     lines.append("## Point Classification")
     lines.append("")
@@ -181,7 +226,16 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
     lines.append("")
     lines.append("## GPU Clarity")
     lines.append("")
-    lines.append("The representative `build-hdf5` run uses the backend configured in `examples/local34_diag_v1_k10000_1k.yaml`, currently `pgf_backend: batched`, so the selected HDF5 build is CPU-based. `RUN_GPU_AUDIT=1` is a separate GPU health/correctness check. The builder can route through CuPy only when a config explicitly sets `pgf_backend: cupy`; this workflow does not imply production HDF5 building is GPU-accelerated.")
+    lines.append("`RUN_GPU_AUDIT=1` runs a separate GPU health/correctness audit. `RUN_GPU_BUILD=1` requests a GPU allocation for the representative HDF5 build and passes `--pgf-backend cupy --require-pgf-backend cupy` so the expensive build path uses CuPy or fails before it starts.")
+    lines.append("")
+    lines.append("## Warnings")
+    lines.append("")
+    warnings = summary.get("warnings", [])
+    if warnings:
+        for warning in warnings:
+            lines.append(f"* {warning}")
+    else:
+        lines.append("* none")
     lines.append("")
     lines.append("## Files")
     lines.append("")
@@ -189,6 +243,7 @@ def write_markdown(path: Path, summary: dict[str, Any]) -> None:
     lines.append("* Shard plan: `plans/full_shards/`")
     lines.append("* Selected manifest: `sample/selected_base_points.csv` and `sample/selected_base_points.json`")
     lines.append("* Representative build: `build/representative_sample.h5` and sidecar summaries")
+    lines.append("* Progress log: `progress/build_representative_sample.progress.jsonl`")
     lines.append("* Classification: `classification/selected_base_point_classification.csv`")
     path.write_text("\n".join(lines) + "\n")
 
@@ -210,6 +265,15 @@ def main() -> int:
     build_summary = load_json(run_dir / "build" / "representative_sample.summary.json")
     plan_summary = load_json(run_dir / "plans" / "full_plan" / "plan_summary.json")
     shard_summary = load_json(run_dir / "plans" / "full_shards" / "balanced_shards.summary.json")
+    progress_path = run_dir / "progress" / "build_representative_sample.progress.jsonl"
+    progress_events = load_progress(progress_path)
+    build_runtime = parse_key_value_file(run_dir / "gpu_build" / "gpu_build_metadata.txt")
+    cupy_check = (run_dir / "gpu_build" / "cupy_check.txt")
+    if cupy_check.exists():
+        for line in cupy_check.read_text(errors="replace").splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                build_runtime[k.strip()] = v.strip()
     classification = classify_points(manifest_rows, build_summary)
     classification_path = run_dir / "classification" / "selected_base_point_classification.csv"
     write_classification_csv(classification_path, classification)
@@ -217,6 +281,33 @@ def main() -> int:
     for row in classification:
         label = str(row["classification"])
         counts[label] = counts.get(label, 0) + 1
+    progress_summary = {
+        "path": str(progress_path),
+        "exists": bool(progress_path.exists()),
+        "n_events": int(len(progress_events)),
+        "completed_base_points": int(sum(1 for e in progress_events if e.get("event_type") == "finish_base_point")),
+        "error_events": int(sum(1 for e in progress_events if e.get("event_type") == "error")),
+        "last_event": progress_events[-1] if progress_events else None,
+    }
+    warnings: list[str] = []
+    actual_backend = str(build_summary.get("actual_build_backend", "unknown"))
+    if actual_backend not in {"cupy", "unknown"}:
+        warnings.append(f"Representative build backend was `{actual_backend}`, not `cupy`.")
+    output_bytes = build_summary.get("output_bytes")
+    if output_bytes is not None and int(output_bytes) < 1_000_000:
+        warnings.append(f"Representative HDF5 output is tiny: {output_bytes} bytes.")
+    if int(build_summary.get("n_base_points_attempted", 0) or 0) == 0:
+        warnings.append("No base point completed or no build summary was produced.")
+    if not progress_summary["exists"] or progress_summary["n_events"] == 0:
+        warnings.append("Progress file is missing or empty.")
+    if shard_summary:
+        warnings.append("Shard planning ran during representative calibration; keep CAL_RUN_SHARD_PLAN=0 unless shard balance is specifically being measured.")
+    build_stage = "unknown"
+    selected_env = run_dir / "sample" / "selected_manifest_for_build.env"
+    if selected_env.exists():
+        for line in selected_env.read_text(errors="replace").splitlines():
+            if line.startswith("selected_stage="):
+                build_stage = line.split("=", 1)[1].strip()
 
     summary: dict[str, Any] = {
         "format": "tailbin_representative_calibration_summary_v1_0",
@@ -231,6 +322,8 @@ def main() -> int:
         },
         "commands": commands,
         "metadata": parse_slurm_metadata(run_dir),
+        "build_runtime": build_runtime,
+        "build_stage": build_stage,
         "cli_outputs": cli_json,
         "plan_summary": plan_summary,
         "shard_summary": shard_summary,
@@ -240,6 +333,8 @@ def main() -> int:
         "classification": classification,
         "classification_counts": counts,
         "classification_csv": str(classification_path),
+        "progress": progress_summary,
+        "warnings": warnings,
         "accounting": parse_accounting(run_dir),
         "gpu_monitor_logs": parse_gpu_monitor_logs(run_dir),
         "gpu_audit": load_json(run_dir / "gpu_audit" / "gpu_backend_audit.json"),

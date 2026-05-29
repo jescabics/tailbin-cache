@@ -23,7 +23,7 @@ This repository uses a split workflow for planning, implementation, cluster exec
 9. Bring the result bundle back to ChatGPT for analysis.
 10. Repeat.
 
-After smoke/audit is green, run O2 resource calibration before production. Smoke/audit proves the environment and CPU/GPU paths work; resource calibration measures runtime, memory, GPU behavior, and shard-planning shape so the first production pilot uses reviewed resource requests. The next cluster steps should be representative resource calibration for `local34_diag_v1_k10000_1k`, followed by resource calibration/preflight for `full100k_v1_k50000`.
+After smoke/audit is green, run O2 resource calibration before production. Smoke/audit proves the environment and CPU/GPU paths work; resource calibration measures runtime, memory, GPU behavior, and shard-planning shape so the first production pilot uses reviewed resource requests. The next cluster step is staged representative resource calibration for `local34_diag_v1_k10000_1k`: CPU plan/selection, then `RUN_GPU_BUILD=1` representative HDF5 build, then collection. Start with `easy_smoke` before any 8-point or 40-point sample, and keep full `full100k_v1_k50000` production disabled until Grid B calibration is reviewed.
 
 ## Boundaries
 

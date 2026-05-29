@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=tailbin_representative_cal
+#SBATCH --job-name=tailbin_representative_plan
 #SBATCH -p short
-#SBATCH -t 12:00:00
+#SBATCH -t 2:00:00
 #SBATCH -c 1
-#SBATCH --mem=8G
+#SBATCH --mem=4G
 #SBATCH -o logs/%x_%j.out
 #SBATCH -e logs/%x_%j.err
 
@@ -26,19 +26,30 @@ fi
 RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 CAL_CONFIG="${CAL_CONFIG:-examples/local34_diag_v1_k10000_1k.yaml}"
 CAL_FULL_PLAN="${CAL_FULL_PLAN:-1}"
+CAL_RUN_SHARD_PLAN="${CAL_RUN_SHARD_PLAN:-0}"
 CAL_SHARDS="${CAL_SHARDS:-8}"
-CAL_BUILD_SAMPLE_BASE_POINTS="${CAL_BUILD_SAMPLE_BASE_POINTS:-40}"
-CAL_BUILD_SAMPLE_STRATEGY="${CAL_BUILD_SAMPLE_STRATEGY:-representative_hard}"
+CAL_BUILD_STAGE="${CAL_BUILD_STAGE:-easy_smoke}"
+CAL_BUILD_SAMPLE_BASE_POINTS="${CAL_BUILD_SAMPLE_BASE_POINTS:-1}"
+CAL_BUILD_SAMPLE_STRATEGY="${CAL_BUILD_SAMPLE_STRATEGY:-easy_first}"
+CAL_STRATIFIED_SAMPLE_BASE_POINTS="${CAL_STRATIFIED_SAMPLE_BASE_POINTS:-8}"
+CAL_REPRESENTATIVE_SAMPLE_BASE_POINTS="${CAL_REPRESENTATIVE_SAMPLE_BASE_POINTS:-40}"
+stratified_sample_size="$CAL_STRATIFIED_SAMPLE_BASE_POINTS"
+representative_sample_size="$CAL_REPRESENTATIVE_SAMPLE_BASE_POINTS"
+if [ "$CAL_BUILD_STAGE" = "stratified_probe" ]; then
+  stratified_sample_size="$CAL_BUILD_SAMPLE_BASE_POINTS"
+fi
+if [ "$CAL_BUILD_STAGE" = "representative_sample" ]; then
+  representative_sample_size="$CAL_BUILD_SAMPLE_BASE_POINTS"
+fi
 
 run_dir="results/o2_representative_calibration/${RUN_ID}"
 timing_dir="${run_dir}/timing"
 json_dir="${run_dir}/json"
 plan_dir="${run_dir}/plans"
 sample_dir="${run_dir}/sample"
-build_dir="${run_dir}/build"
 log_dir="${run_dir}/logs"
 
-mkdir -p "$timing_dir" "$json_dir" "$plan_dir" "$sample_dir" "$build_dir" "$log_dir"
+mkdir -p "$timing_dir" "$json_dir" "$plan_dir" "$sample_dir" "$log_dir"
 
 module purge
 module load gcc/14.2.0
@@ -46,12 +57,14 @@ module load python/3.13.1
 
 source .venv_o2/bin/activate
 
+export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 
 {
+  echo "Representative calibration plan/select stage"
   echo "Run ID: ${RUN_ID}"
   echo "Job ID: ${SLURM_JOB_ID:-unknown}"
   echo "Host: $(hostname)"
@@ -61,9 +74,11 @@ export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
   echo "Current git commit: $(git rev-parse HEAD 2>/dev/null || echo unknown)"
   echo "Calibration config: ${CAL_CONFIG}"
   echo "Full plan enabled: ${CAL_FULL_PLAN}"
-  echo "Shard count: ${CAL_SHARDS}"
-  echo "Sample base points: ${CAL_BUILD_SAMPLE_BASE_POINTS}"
-  echo "Sample strategy: ${CAL_BUILD_SAMPLE_STRATEGY}"
+  echo "Run shard plan: ${CAL_RUN_SHARD_PLAN}"
+  echo "Shard count if requested: ${CAL_SHARDS}"
+  echo "Build stage requested: ${CAL_BUILD_STAGE}"
+  echo "Requested build sample size: ${CAL_BUILD_SAMPLE_BASE_POINTS}"
+  echo "Requested build sample strategy: ${CAL_BUILD_SAMPLE_STRATEGY}"
   echo "SLURM partition: ${SLURM_JOB_PARTITION:-unknown}"
   echo "SLURM CPUs per task: ${SLURM_CPUS_PER_TASK:-unknown}"
   echo "SLURM mem per node: ${SLURM_MEM_PER_NODE:-unknown}"
@@ -132,34 +147,76 @@ if [ "$CAL_FULL_PLAN" = "1" ]; then
     python -m tailbin_cache.cli plan --config "$CAL_CONFIG" \
       --output-dir "${plan_dir}/full_plan"
 else
-  echo "CAL_FULL_PLAN must be 1 for representative calibration." >&2
+  echo "CAL_FULL_PLAN must be 1 for representative calibration selection." >&2
   exit 2
 fi
 
-run_timed "plan_shards_grid_b_full" "${json_dir}/plan_shards_grid_b_full.json" \
-  python -m tailbin_cache.cli plan-shards --config "$CAL_CONFIG" \
-    --output-dir "${plan_dir}/full_shards" \
-    --n-shards "$CAL_SHARDS"
+if [ "$CAL_RUN_SHARD_PLAN" = "1" ]; then
+  run_timed "plan_shards_grid_b_from_full_plan" "${json_dir}/plan_shards_grid_b_from_full_plan.json" \
+    python -m tailbin_cache.cli plan-shards \
+      --from-plan-dir "${plan_dir}/full_plan" \
+      --output-dir "${plan_dir}/full_shards" \
+      --n-shards "$CAL_SHARDS"
+else
+  echo "Shard planning skipped by CAL_RUN_SHARD_PLAN=${CAL_RUN_SHARD_PLAN}" | tee "${plan_dir}/full_shards.SKIPPED.txt"
+fi
 
-run_timed "select_representative_base_points" "${json_dir}/select_representative_base_points.json" \
+run_timed "select_easy_first" "${json_dir}/select_easy_first.json" \
   python -m tailbin_cache.cli select-representative \
     --config "$CAL_CONFIG" \
     --plan-dir "${plan_dir}/full_plan" \
-    --output-csv "${sample_dir}/selected_base_points.csv" \
-    --output-json "${sample_dir}/selected_base_points.json" \
-    --sample-size "$CAL_BUILD_SAMPLE_BASE_POINTS" \
-    --strategy "$CAL_BUILD_SAMPLE_STRATEGY"
+    --output-csv "${sample_dir}/selected_easy_first.csv" \
+    --output-json "${sample_dir}/selected_easy_first.json" \
+    --sample-size 1 \
+    --strategy easy_first
 
-run_timed "build_representative_sample" "${json_dir}/build_representative_sample.json" \
-  python -m tailbin_cache.cli build-hdf5 --config "$CAL_CONFIG" \
-    --output "${build_dir}/representative_sample.h5" \
-    --base-point-manifest "${sample_dir}/selected_base_points.csv" \
-    --compression gzip \
-    --compression-opts 4
+run_timed "select_stratified_8" "${json_dir}/select_stratified_8.json" \
+  python -m tailbin_cache.cli select-representative \
+    --config "$CAL_CONFIG" \
+    --plan-dir "${plan_dir}/full_plan" \
+    --output-csv "${sample_dir}/selected_stratified_8.csv" \
+    --output-json "${sample_dir}/selected_stratified_8.json" \
+    --sample-size "$stratified_sample_size" \
+    --strategy representative_stratified
+
+run_timed "select_representative_40" "${json_dir}/select_representative_40.json" \
+  python -m tailbin_cache.cli select-representative \
+    --config "$CAL_CONFIG" \
+    --plan-dir "${plan_dir}/full_plan" \
+    --output-csv "${sample_dir}/selected_representative_40.csv" \
+    --output-json "${sample_dir}/selected_representative_40.json" \
+    --sample-size "$representative_sample_size" \
+    --strategy representative_hard
+
+case "$CAL_BUILD_STAGE" in
+  easy_smoke)
+    cp "${sample_dir}/selected_easy_first.csv" "${sample_dir}/selected_base_points.csv"
+    cp "${sample_dir}/selected_easy_first.json" "${sample_dir}/selected_base_points.json"
+    ;;
+  stratified_probe)
+    cp "${sample_dir}/selected_stratified_8.csv" "${sample_dir}/selected_base_points.csv"
+    cp "${sample_dir}/selected_stratified_8.json" "${sample_dir}/selected_base_points.json"
+    ;;
+  representative_sample)
+    cp "${sample_dir}/selected_representative_40.csv" "${sample_dir}/selected_base_points.csv"
+    cp "${sample_dir}/selected_representative_40.json" "${sample_dir}/selected_base_points.json"
+    ;;
+  *)
+    echo "Unknown CAL_BUILD_STAGE=${CAL_BUILD_STAGE}; expected easy_smoke, stratified_probe, or representative_sample." >&2
+    exit 2
+    ;;
+esac
+
+{
+  echo "selected_manifest_csv=${sample_dir}/selected_base_points.csv"
+  echo "selected_manifest_json=${sample_dir}/selected_base_points.json"
+  echo "selected_stage=${CAL_BUILD_STAGE}"
+} > "${sample_dir}/selected_manifest_for_build.env"
 
 python scripts/o2/summarize_representative_calibration.py --run-id "$RUN_ID" \
-  > "${log_dir}/summarize_stdout.txt" \
-  2> "${log_dir}/summarize_stderr.txt"
+  > "${log_dir}/summarize_plan_stdout.txt" \
+  2> "${log_dir}/summarize_plan_stderr.txt" || true
 
 echo "Finished: $(date)" | tee -a "$run_dir/metadata.txt"
-echo "Summary: ${run_dir}/summary.md"
+echo "Selected manifest: ${sample_dir}/selected_base_points.csv"
+echo "Summary so far: ${run_dir}/summary.md"

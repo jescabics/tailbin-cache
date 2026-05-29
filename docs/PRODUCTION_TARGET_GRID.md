@@ -193,20 +193,24 @@ T_b = 20.0000000000, T = 14.0000000000, theta_f = 400.0000000000
 
 Run resource calibration only. Do not run full production.
 
-First run the local age-34 diagonal representative calibration. This replaces the older two-point smoke-style build; the workflow plans all 1,000 Grid B base points, selects a deterministic representative 40-base-point sample, and builds only that selected sample.
+First run the local age-34 diagonal GPU easy-smoke calibration. This replaces the older two-point smoke-style build; the workflow plans all 1,000 Grid B base points, writes ordered 1-point, 8-point, and 40-point manifests, and initially builds only the 1-point easy-smoke sample.
 
 ```bash
-RUN_LABEL=local34_diag_v1_k10000_1k_representative \
+RUN_LABEL=local34_diag_v1_k10000_1k_gpu_easy_smoke \
 CAL_CONFIG=examples/local34_diag_v1_k10000_1k.yaml \
 CAL_FULL_PLAN=1 \
+CAL_RUN_SHARD_PLAN=0 \
 CAL_SHARDS=8 \
-CAL_BUILD_SAMPLE_BASE_POINTS=40 \
-CAL_BUILD_SAMPLE_STRATEGY=representative_hard \
+CAL_BUILD_STAGE=easy_smoke \
+CAL_BUILD_SAMPLE_BASE_POINTS=1 \
+CAL_BUILD_SAMPLE_STRATEGY=easy_first \
+RUN_GPU_BUILD=1 \
 RUN_GPU_AUDIT=1 \
+CUDA_MODULE=cuda/12.8 \
 bash scripts/o2/submit_representative_calibration.sh
 ```
 
-Representative selection includes predicted easiest, median, and hardest work-proxy points; low/high `R`; low/high `N`; `T_b = 0`; `T_b = 20`; intermediate `T_b` values; and planner-predicted full or large-prefix points when available. The selected base points are written to `sample/selected_base_points.csv` and `sample/selected_base_points.json`.
+Representative selection includes predicted easiest, median, and hardest work-proxy points; low/high `R`; low/high `N`; `T_b = 0`; `T_b = 20`; intermediate `T_b` values; and planner-predicted full or large-prefix points when available. The staged workflow writes `selected_easy_first.csv`, `selected_stratified_8.csv`, and `selected_representative_40.csv`, then copies the selected stage to `sample/selected_base_points.csv` and `sample/selected_base_points.json`.
 
 Then run the full target preflight:
 
@@ -222,7 +226,7 @@ bash scripts/o2/submit_resource_calibration.sh
 
 Review both calibration summaries before creating any production submission workflow. Full Grid A production remains disabled until the Grid B representative calibration is reviewed.
 
-The representative Grid B HDF5 build uses `pgf_backend: batched` from `examples/local34_diag_v1_k10000_1k.yaml`, so it is CPU-based. `RUN_GPU_AUDIT=1` remains a separate GPU health/correctness check.
+The checked-in Grid B config remains `pgf_backend: batched`, but the staged O2 workflow uses `RUN_GPU_BUILD=1` to pass a CuPy backend override for the representative HDF5 build. `RUN_GPU_AUDIT=1` remains a separate GPU health/correctness check and does not accelerate the build by itself.
 
 ## Relationship To Older Templates
 

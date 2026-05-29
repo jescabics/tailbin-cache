@@ -46,7 +46,7 @@ results/o2_resource_calibration/<run_id>/summary.json
 results/tailbin_o2_resource_calibration_<run_id>.tgz
 ```
 
-Smoke/audit is a functional check. Resource calibration is the next decision-making step: it measures small estimate/plan/shard-plan/tiny-build commands and, by default, submits a current GPU audit so GPU behavior can be reviewed beside CPU timing data.
+Smoke/audit is a functional check. Resource calibration is the next decision-making step: it measures estimate, full planning, sample selection, representative HDF5 building, memory, and GPU behavior.
 
 Do not launch full production until the calibration summary, accounting, logs, and GPU audit output have been reviewed.
 
@@ -57,20 +57,36 @@ The next target-grid calibration order is:
 
 Do not use a two-point build as the serious Grid B calibration. A two-point build is only a smoke test; it cannot reveal which age-34 diagonal regimes are easy, hard, slow, memory-heavy, or certification-problematic.
 
-Run the local age-34 diagonal representative calibration first:
+Run the local age-34 diagonal GPU easy smoke first:
 
 ```bash
-RUN_LABEL=local34_diag_v1_k10000_1k_representative \
+RUN_LABEL=local34_diag_v1_k10000_1k_gpu_easy_smoke \
 CAL_CONFIG=examples/local34_diag_v1_k10000_1k.yaml \
 CAL_FULL_PLAN=1 \
+CAL_RUN_SHARD_PLAN=0 \
 CAL_SHARDS=8 \
-CAL_BUILD_SAMPLE_BASE_POINTS=40 \
-CAL_BUILD_SAMPLE_STRATEGY=representative_hard \
+CAL_BUILD_STAGE=easy_smoke \
+CAL_BUILD_SAMPLE_BASE_POINTS=1 \
+CAL_BUILD_SAMPLE_STRATEGY=easy_first \
+RUN_GPU_BUILD=1 \
 RUN_GPU_AUDIT=1 \
+CUDA_MODULE=cuda/12.8 \
 bash scripts/o2/submit_representative_calibration.sh
 ```
 
-This workflow plans all 1,000 Grid B base points and all 20,000 alpha tables, selects a deterministic representative 40-base-point sample, builds only that selected sample, classifies selected points as easy/moderate/hard/problematic, and bundles the current-run logs and artifacts.
+This staged workflow runs CPU plan/selection first, then runs the representative HDF5 build as a separate dependent job. It plans all 1,000 Grid B base points and all 20,000 alpha tables, writes ordered manifests for 1-point, 8-point, and 40-point samples, builds only the selected stage, classifies selected points as easy/moderate/hard/problematic, and bundles current-run logs and artifacts.
+
+`RUN_GPU_AUDIT=1` is only a separate GPU health/correctness audit. `RUN_GPU_BUILD=1` is required for the representative HDF5 build itself to run with `pgf_backend: cupy`; if the effective backend is not CuPy, the build job fails before expensive work begins.
+
+Representative calibration should proceed in stages:
+
+1. `easy_smoke`: 1 easy point, GPU build, default next run.
+2. `stratified_probe`: 8 points across easy/median/hard and scientific boundaries.
+3. `representative_sample`: 40 points only after the smaller stages show real GPU progress and acceptable resource use.
+
+The build writes live progress events to `progress/build_representative_sample.progress.jsonl` and flushed progress lines to the build job stdout, so `tail -f logs/*<GPU_BUILD_JOBID>*` should show movement.
+
+Shard planning is disabled by default for representative calibration (`CAL_RUN_SHARD_PLAN=0`) because the cancelled run showed it doubled pre-build planning time. If shard planning is explicitly requested, the script reuses the existing full plan output instead of rerunning full preflight.
 
 Then run the full target preflight, still as calibration only:
 
@@ -219,7 +235,7 @@ Short jobs should be grouped when practical so each array task runs at least rou
 
 GPU resources should be requested only when the code actually uses the GPU backend.
 
-For `local34_diag_v1_k10000_1k`, the representative HDF5 build uses the config value `pgf_backend: batched`, so it is CPU-based. `RUN_GPU_AUDIT=1` is a separate health/correctness check. The HDF5 builder can use the CuPy path only when the build config explicitly sets `pgf_backend: cupy`; do not assume production HDF5 builds are GPU-accelerated from the audit alone.
+For `local34_diag_v1_k10000_1k`, the checked-in scientific YAML keeps `pgf_backend: batched`. The representative O2 workflow does not mutate that config; when `RUN_GPU_BUILD=1`, it passes a build-time backend override equivalent to `pgf_backend: cupy` and requires that backend before expensive HDF5 work begins. `RUN_GPU_AUDIT=1` remains a separate health/correctness check and does not make the HDF5 build use the GPU.
 
 GPU audit jobs must report:
 

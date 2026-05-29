@@ -73,6 +73,7 @@ cat "$latest_rep/summary.md"
 python -m json.tool "$latest_rep/summary.json" | head -n 200
 head -n 40 "$latest_rep/sample/selected_base_points.csv"
 head -n 40 "$latest_rep/classification/selected_base_point_classification.csv"
+tail -n 40 "$latest_rep/progress/build_representative_sample.progress.jsonl"
 ```
 
 ## What ChatGPT Should Analyze
@@ -108,6 +109,7 @@ For each job, ChatGPT should extract:
 * whether CPU/GPU allocation matched actual work;
 * whether outputs and result bundles were produced.
 * for resource calibration, `/usr/bin/time -v` elapsed time and maximum resident set size for each timed command.
+* for representative calibration, whether `RUN_GPU_BUILD=1` was used, whether the actual build backend was `cupy`, and how many progress events/base points completed.
 
 ## Resource Calibration Rules
 
@@ -120,7 +122,10 @@ For each job, ChatGPT should extract:
 * Keep generated outputs, logs, HDF5 caches, and bundles out of Git.
 * Treat smoke/audit as a functional check and resource calibration as the resource-decision step before production pilot.
 * Prefer `/usr/bin/time -v` timing files when `sacct MaxRSS` is missing or unreliable.
-* Do not treat a two-point build as serious calibration. Representative calibration should plan the full target grid, select a deterministic sample across easy/median/hard/boundary regimes, and build only the selected sample.
+* Do not treat a two-point build as serious calibration. Representative calibration should plan the full target grid, select deterministic samples across easy/median/hard/boundary regimes, and build only the selected stage.
+* `RUN_GPU_AUDIT=1` only audits GPU health/correctness. `RUN_GPU_BUILD=1` is required for the representative HDF5 build itself to use `pgf_backend: cupy`.
+* Run representative calibration in stages: `easy_smoke`, then `stratified_probe`, then larger `representative_sample` only after summaries show real GPU progress.
+* Shard planning should remain disabled by default for representative calibration unless shard balance is the specific question.
 
 ## What Codex Needs In Each Prompt
 
@@ -134,6 +139,8 @@ Codex prompts should include:
 * age constraint mode, such as `T + T_b <= max_age` or `T + T_b = age_exact`;
 * whether `T` / `T_b` are integer-grid, linearly sampled, or paired diagonal values;
 * representative sample size and selection strategy when applicable;
+* representative build stage, such as `easy_smoke`, `stratified_probe`, or `representative_sample`;
+* whether `RUN_GPU_BUILD` and `RUN_GPU_AUDIT` were enabled;
 * exact files it may edit;
 * exact files it must not edit;
 * summary of O2 results;

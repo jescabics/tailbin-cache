@@ -39,6 +39,8 @@ Repository rules:
 * O2 scripts must use SLURM for heavy work and avoid login-node compute.
 * After smoke/audit is green, use resource calibration before production pilot decisions.
 * Prefer `/usr/bin/time -v` calibration output when `sacct MaxRSS` is missing or unreliable.
+* For representative Grid B calibration, keep planning/selection separate from HDF5 building, keep shard planning disabled by default, and use `RUN_GPU_BUILD=1` for GPU-backed representative HDF5 builds. `RUN_GPU_AUDIT=1` is only a separate health/correctness audit.
+* Do not recommend a 40-point representative build until the 1-point GPU easy smoke summary shows actual CuPy build progress.
 
 Current O2 environment facts:
 

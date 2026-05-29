@@ -22,7 +22,7 @@ fi
 run_dir="results/o2_representative_calibration/${RUN_ID}"
 bundle_path="results/tailbin_o2_representative_calibration_${RUN_ID}.tgz"
 
-mkdir -p "$run_dir"/{accounting,docs,examples,logs/current,gpu_audit}
+mkdir -p "$run_dir"/{accounting,docs,examples,logs/current,gpu_audit,gpu_build}
 shopt -s nullglob
 
 copy_file_if_exists() {
@@ -85,8 +85,9 @@ collect_accounting() {
   echo "Repository: ${SLURM_SUBMIT_DIR:-$PWD}"
   echo "Submit git commit: ${SUBMIT_GIT_COMMIT:-unknown}"
   echo "Current git commit: $(git rev-parse HEAD 2>/dev/null || echo unknown)"
-  echo "Calibration job ID: ${CAL_JOB_ID:-}"
-  echo "GPU job ID: ${GPU_JOB_ID:-}"
+  echo "Plan/select job ID: ${PLAN_JOB_ID:-${CAL_JOB_ID:-}}"
+  echo "Representative build job ID: ${BUILD_JOB_ID:-}"
+  echo "GPU audit job ID: ${GPU_AUDIT_JOB_ID:-${GPU_JOB_ID:-}}"
   echo "Collector job ID: ${SLURM_JOB_ID:-}"
   echo "Calibration config: ${CAL_CONFIG:-examples/local34_diag_v1_k10000_1k.yaml}"
 } > "$run_dir/collection_metadata.txt"
@@ -103,11 +104,17 @@ copy_file_if_exists examples/local34_diag_v1_k10000_1k.yaml "$run_dir/examples/l
 copy_file_if_exists examples/full100k_v1_k50000.yaml "$run_dir/examples/full100k_v1_k50000.yaml"
 copy_file_if_exists examples/kmax20_o2_gpu_probe.yaml "$run_dir/examples/kmax20_o2_gpu_probe.yaml"
 
-if [ -n "${CAL_JOB_ID:-}" ]; then
-  copy_matching_files "$run_dir/logs/current" "representative calibration job logs" "logs/*${CAL_JOB_ID}*"
+plan_job_id="${PLAN_JOB_ID:-${CAL_JOB_ID:-}}"
+gpu_audit_job_id="${GPU_AUDIT_JOB_ID:-${GPU_JOB_ID:-}}"
+
+if [ -n "$plan_job_id" ]; then
+  copy_matching_files "$run_dir/logs/current" "representative plan/select job logs" "logs/*${plan_job_id}*"
 fi
-if [ -n "${GPU_JOB_ID:-}" ]; then
-  copy_matching_files "$run_dir/logs/current" "GPU audit job logs" "logs/*${GPU_JOB_ID}*"
+if [ -n "${BUILD_JOB_ID:-}" ]; then
+  copy_matching_files "$run_dir/logs/current" "representative build job logs" "logs/*${BUILD_JOB_ID}*"
+fi
+if [ -n "$gpu_audit_job_id" ]; then
+  copy_matching_files "$run_dir/logs/current" "GPU audit job logs" "logs/*${gpu_audit_job_id}*"
 fi
 if [ -n "${SLURM_JOB_ID:-}" ]; then
   copy_matching_files "$run_dir/logs/current" "collector job logs" "logs/*${SLURM_JOB_ID}*"
@@ -118,8 +125,8 @@ if [ "${INCLUDE_ALL_LOGS:-0}" = "1" ]; then
 fi
 
 gpu_meta_current=0
-if [ -n "${GPU_JOB_ID:-}" ] && [ -f results/o2_gpu_audit/gpu_audit_metadata.txt ]; then
-  if grep -q "Job ID: ${GPU_JOB_ID}" results/o2_gpu_audit/gpu_audit_metadata.txt; then
+if [ -n "$gpu_audit_job_id" ] && [ -f results/o2_gpu_audit/gpu_audit_metadata.txt ]; then
+  if grep -q "Job ID: ${gpu_audit_job_id}" results/o2_gpu_audit/gpu_audit_metadata.txt; then
     gpu_meta_current=1
   fi
 fi
@@ -129,17 +136,22 @@ if [ "$gpu_meta_current" -eq 1 ]; then
   copy_file_if_exists results/o2_gpu_audit/gpu_backend_audit.json "$run_dir/gpu_audit/gpu_backend_audit.json"
   copy_file_if_exists results/o2_gpu_audit/nvidia_smi.txt "$run_dir/gpu_audit/nvidia_smi.txt"
 else
-  echo "No current-run GPU audit metadata found for GPU_JOB_ID=${GPU_JOB_ID:-unset}; generic GPU audit artifacts were not copied." > "$run_dir/gpu_audit/README.txt"
+  echo "No current-run GPU audit metadata found for GPU_AUDIT_JOB_ID=${gpu_audit_job_id:-unset}; generic GPU audit artifacts were not copied." > "$run_dir/gpu_audit/README.txt"
 fi
 
-if [ -n "${GPU_JOB_ID:-}" ] && [ -f "results/o2_gpu_audit/${GPU_JOB_ID}.gpulog" ]; then
-  copy_file_if_exists "results/o2_gpu_audit/${GPU_JOB_ID}.gpulog" "$run_dir/gpu_audit/current_gpu_monitor/${GPU_JOB_ID}.gpulog"
+if [ -n "$gpu_audit_job_id" ] && [ -f "results/o2_gpu_audit/${gpu_audit_job_id}.gpulog" ]; then
+  copy_file_if_exists "results/o2_gpu_audit/${gpu_audit_job_id}.gpulog" "$run_dir/gpu_audit/current_gpu_monitor/${gpu_audit_job_id}.gpulog"
 else
-  echo "No current-run GPU monitor log found for GPU_JOB_ID=${GPU_JOB_ID:-unset}" >> "$run_dir/gpu_audit/README.txt"
+  echo "No current-run GPU audit monitor log found for GPU_AUDIT_JOB_ID=${gpu_audit_job_id:-unset}" >> "$run_dir/gpu_audit/README.txt"
 fi
 
-collect_accounting "${CAL_JOB_ID:-}" "representative_calibration"
-collect_accounting "${GPU_JOB_ID:-}" "gpu_audit"
+if [ -n "${BUILD_JOB_ID:-}" ]; then
+  copy_matching_files "$run_dir/gpu_build/current_gpu_monitor" "representative build GPU monitor logs" "$run_dir/gpu_build/*.gpulog"
+fi
+
+collect_accounting "$plan_job_id" "representative_plan_select"
+collect_accounting "${BUILD_JOB_ID:-}" "representative_build"
+collect_accounting "$gpu_audit_job_id" "gpu_audit"
 
 if [ -f .venv_o2/bin/activate ]; then
   module purge

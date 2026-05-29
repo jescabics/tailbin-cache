@@ -137,6 +137,75 @@ def write_balanced_shard_plan(plan: Dict[str, Any], output_dir: str | Path) -> N
             w.writeheader(); w.writerows(rows)
 
 
+def balanced_shard_plan_from_plan_bundles(plan_dir: str | Path, *, n_shards: int) -> Dict[str, Any]:
+    """Build a shard plan from an existing full adaptive plan.
+
+    This avoids re-running moment preflight when `plan_bundles.csv` has already
+    recorded the planner's work proxy for each bundle.
+    """
+    if int(n_shards) < 1:
+        raise ValueError("n_shards must be >= 1")
+    p = Path(plan_dir)
+    bundles_path = p / "plan_bundles.csv" if p.is_dir() else p
+    summary_path = bundles_path.with_name("plan_summary.json")
+    plan_summary: Dict[str, Any] = {}
+    if summary_path.exists():
+        plan_summary = json.loads(summary_path.read_text())
+    if not bundles_path.exists():
+        raise FileNotFoundError(f"plan_bundles.csv not found: {bundles_path}")
+    bundle_rows: List[Dict[str, Any]] = []
+    with bundles_path.open("r", newline="") as f:
+        reader = csv.DictReader(f)
+        for raw in reader:
+            row: Dict[str, Any] = dict(raw)
+            for key in ["bundle_idx", "depth", "alpha_index", "n_theta", "n_constant", "n_prefix", "n_full", "max_prefix_kmax", "v03_node_work_proxy", "v04_node_work_proxy", "n_v04_prefix_buckets"]:
+                if key in row and row[key] not in (None, ""):
+                    row[key] = int(float(row[key]))
+            for key in ["R", "T", "N", "alpha", "v04_vs_v03_work_ratio", "seconds_preflight"]:
+                if key in row and row[key] not in (None, ""):
+                    row[key] = float(row[key])
+            row["node_work_proxy"] = int(row.get("v04_node_work_proxy", row.get("node_work_proxy", 0)) or 0)
+            bundle_rows.append(row)
+
+    shard_rows: List[List[Dict[str, Any]]] = [[] for _ in range(int(n_shards))]
+    shard_loads = [0.0 for _ in range(int(n_shards))]
+    for row in sorted(bundle_rows, key=lambda r: (float(r["node_work_proxy"]), int(r.get("n_theta", 1))), reverse=True):
+        j = min(range(int(n_shards)), key=lambda x: shard_loads[x])
+        shard_rows[j].append(row)
+        shard_loads[j] += max(1.0, float(row["node_work_proxy"]))
+    rows_out: List[Dict[str, Any]] = []
+    for shard_idx, rows in enumerate(shard_rows):
+        for r in rows:
+            rr = dict(r)
+            rr["shard_index"] = int(shard_idx)
+            rows_out.append(rr)
+    per_shard = []
+    for shard_idx, rows in enumerate(shard_rows):
+        load = float(sum(max(1.0, float(r["node_work_proxy"])) for r in rows))
+        per_shard.append({
+            "shard_index": int(shard_idx),
+            "n_bundles": int(len(rows)),
+            "node_work_proxy": float(load),
+            "n_constant_tables": int(sum(int(r.get("n_constant", 0)) for r in rows)),
+            "n_nonconstant_tables": int(sum(int(r.get("n_theta", 1)) - int(r.get("n_constant", 0)) for r in rows)),
+        })
+    loads = [r["node_work_proxy"] for r in per_shard]
+    return {
+        "format": "tailbin_balanced_shard_plan_from_existing_plan_v1_0",
+        "source_plan_dir": str(p),
+        "source_plan_summary": plan_summary,
+        "n_shards": int(n_shards),
+        "n_bundles_expected_total": int(plan_summary.get("n_bundles_expected", len(bundle_rows))),
+        "n_bundles_planned": int(len(bundle_rows)),
+        "total_node_work_proxy": float(sum(loads)),
+        "max_shard_load": float(max(loads) if loads else 0.0),
+        "min_shard_load": float(min(loads) if loads else 0.0),
+        "load_imbalance_ratio": float(max(loads) / max(min(loads), 1.0)) if loads else 0.0,
+        "per_shard": per_shard,
+        "bundle_rows": rows_out,
+    }
+
+
 def bundle_indices_for_shard(plan: Dict[str, Any], shard_index: int) -> set[int]:
     return {int(r["bundle_idx"]) for r in plan.get("bundle_rows", []) if int(r["shard_index"]) == int(shard_index)}
 

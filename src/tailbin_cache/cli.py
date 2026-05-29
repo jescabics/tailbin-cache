@@ -36,7 +36,8 @@ def main(argv=None) -> int:
     sp.add_argument("--limit-bundles", type=int, default=None)
 
     sp = sub.add_parser("plan-shards", help="make a difficulty-balanced shard plan for parallel HDF5 builds")
-    sp.add_argument("--config", required=True)
+    sp.add_argument("--config", default=None)
+    sp.add_argument("--from-plan-dir", default=None, help="reuse an existing plan output directory instead of recomputing preflight")
     sp.add_argument("--output-dir", required=True)
     sp.add_argument("--n-shards", type=int, default=20)
     sp.add_argument("--limit-bundles", type=int, default=None)
@@ -50,6 +51,13 @@ def main(argv=None) -> int:
     sp.add_argument("--compression", default="gzip")
     sp.add_argument("--compression-opts", type=int, default=4)
     sp.add_argument("--base-point-manifest", default=None, help="CSV/JSON manifest of explicit base_idx values to build")
+    sp.add_argument("--pgf-backend", default=None, help="override build.pgf_backend for this run, e.g. cupy")
+    sp.add_argument("--require-pgf-backend", default=None, help="fail before building unless the effective backend matches this value")
+    sp.add_argument("--progress-path", default=None, help="write live build progress JSONL here")
+    sp.add_argument("--no-progress-stdout", action="store_true", help="suppress flushed progress lines on stdout")
+    sp.add_argument("--timeout-seconds", type=float, default=None, help="abort after this many cumulative build seconds")
+    sp.add_argument("--max-seconds-per-base-point", type=float, default=None, help="abort when a base point exceeds this many seconds")
+    sp.add_argument("--warn-only-timeout", action="store_true", help="record timeout events without raising")
 
     sp = sub.add_parser("select-representative", help="select representative base points from a full adaptive plan")
     sp.add_argument("--config", required=True)
@@ -110,11 +118,18 @@ def main(argv=None) -> int:
         return 0
 
     if args.cmd == "plan-shards":
-        cfg = config_from_yaml(args.config)
-        grid = grid_from_dict(cfg)
-        build_cfg, budget, _n_jobs = build_config_from_dict(cfg)
-        from .shards import balanced_shard_plan, write_balanced_shard_plan
-        summary = balanced_shard_plan(grid, build_cfg, budget, n_shards=args.n_shards, limit_bundles=args.limit_bundles)
+        from .shards import balanced_shard_plan, balanced_shard_plan_from_plan_bundles, write_balanced_shard_plan
+        if args.from_plan_dir:
+            if args.limit_bundles is not None:
+                raise SystemExit("--limit-bundles is not supported with --from-plan-dir")
+            summary = balanced_shard_plan_from_plan_bundles(args.from_plan_dir, n_shards=args.n_shards)
+        else:
+            if not args.config:
+                raise SystemExit("plan-shards requires --config unless --from-plan-dir is supplied")
+            cfg = config_from_yaml(args.config)
+            grid = grid_from_dict(cfg)
+            build_cfg, budget, _n_jobs = build_config_from_dict(cfg)
+            summary = balanced_shard_plan(grid, build_cfg, budget, n_shards=args.n_shards, limit_bundles=args.limit_bundles)
         write_balanced_shard_plan(summary, args.output_dir)
         keys = ["n_shards", "n_bundles_planned", "total_node_work_proxy", "max_shard_load", "min_shard_load", "load_imbalance_ratio", "elapsed_seconds"]
         _json_print({k: summary[k] for k in keys if k in summary})
@@ -127,6 +142,13 @@ def main(argv=None) -> int:
             n_shards=args.n_shards, shard_index=args.shard_index,
             compression=args.compression, compression_opts=args.compression_opts,
             base_point_manifest=args.base_point_manifest,
+            pgf_backend=args.pgf_backend,
+            require_pgf_backend=args.require_pgf_backend,
+            progress_path=args.progress_path,
+            progress_stdout=not args.no_progress_stdout,
+            timeout_seconds=args.timeout_seconds,
+            max_seconds_per_base_point=args.max_seconds_per_base_point,
+            fail_on_timeout=not args.warn_only_timeout,
         )
         keys = [
             "n_base_points_attempted", "n_tables_written", "n_tables_certified", "certified_fraction_written",

@@ -61,6 +61,7 @@ def test_representative_selector_is_deterministic_and_includes_boundaries(tmp_pa
 
     assert [p["base_idx"] for p in first] == [p["base_idx"] for p in second]
     assert len(first) == 40
+    assert "work_proxy_easiest" in first[0]["selection_reasons"]
     assert min(p["R"] for p in first) == 0.01
     assert max(p["R"] for p in first) == 1.0
     assert min(p["N"] for p in first) == 10000.0
@@ -72,6 +73,26 @@ def test_representative_selector_is_deterministic_and_includes_boundaries(tmp_pa
     assert any("work_proxy_median" in p["selection_reasons"] for p in first)
     assert any("work_proxy_hardest" in p["selection_reasons"] for p in first)
     assert [p["base_idx"] for p in first] != list(range(40))
+
+
+def test_representative_stage_sizes_and_ordering(tmp_path):
+    plan_dir = tmp_path / "plan"
+    _write_fake_grid_b_plan(plan_dir)
+    points = aggregate_base_points(GRID_B_CONFIG, plan_dir)
+
+    easy = select_representative_base_points(points, sample_size=1, strategy="easy_first")
+    stratified = select_representative_base_points(points, sample_size=8, strategy="representative_stratified")
+    representative = select_representative_base_points(points, sample_size=40, strategy="representative_hard")
+    hard_first = select_representative_base_points(points, sample_size=8, strategy="representative_hard_first")
+
+    assert len(easy) == 1
+    assert len(stratified) == 8
+    assert len(representative) == 40
+    assert "work_proxy_easiest" in easy[0]["selection_reasons"]
+    assert "work_proxy_easiest" in stratified[0]["selection_reasons"]
+    assert "work_proxy_easiest" in representative[0]["selection_reasons"]
+    assert "work_proxy_hardest" not in representative[0]["selection_reasons"]
+    assert "work_proxy_hardest" in hard_first[0]["selection_reasons"] or "planner_full_or_large_prefix" in hard_first[0]["selection_reasons"]
 
 
 def test_representative_selector_preserves_explicit_base_points(tmp_path):

@@ -132,26 +132,38 @@ Use `RUN_GPU_AUDIT=0` for CPU-only calibration. Do not start full production unt
 
 ## Representative Grid B Calibration
 
-For the named `local34_diag_v1_k10000_1k` target, do not use a two-base-point build as serious calibration. Use the representative workflow:
+For the named `local34_diag_v1_k10000_1k` target, do not use a two-base-point build as serious calibration, and do not jump straight to a 40-point hard sample. Start with a staged GPU easy smoke:
 
 ```bash
-RUN_LABEL=local34_diag_v1_k10000_1k_representative \
+RUN_LABEL=local34_diag_v1_k10000_1k_gpu_easy_smoke \
 CAL_CONFIG=examples/local34_diag_v1_k10000_1k.yaml \
 CAL_FULL_PLAN=1 \
+CAL_RUN_SHARD_PLAN=0 \
 CAL_SHARDS=8 \
-CAL_BUILD_SAMPLE_BASE_POINTS=40 \
-CAL_BUILD_SAMPLE_STRATEGY=representative_hard \
+CAL_BUILD_STAGE=easy_smoke \
+CAL_BUILD_SAMPLE_BASE_POINTS=1 \
+CAL_BUILD_SAMPLE_STRATEGY=easy_first \
+RUN_GPU_BUILD=1 \
 RUN_GPU_AUDIT=1 \
+CUDA_MODULE=cuda/12.8 \
 bash scripts/o2/submit_representative_calibration.sh
 ```
 
-This submits a CPU calibration job, an optional GPU audit job, and a dependent collector. The CPU calibration job:
+This submits a CPU plan/select job, a dependent representative build job, an optional GPU audit job, and a dependent collector. The CPU plan/select job:
 
 * plans all Grid B base points and alpha tables;
-* writes the full adaptive plan and balanced shard plan;
-* selects a deterministic representative sample, not the first N rows;
-* writes `sample/selected_base_points.csv` and `sample/selected_base_points.json`;
-* builds only the selected base points via `build-hdf5 --base-point-manifest`;
+* writes the full adaptive plan;
+* skips shard planning by default (`CAL_RUN_SHARD_PLAN=0`);
+* writes ordered manifests `selected_easy_first.csv`, `selected_stratified_8.csv`, and `selected_representative_40.csv`;
+* copies the stage-selected manifest to `sample/selected_base_points.csv`.
+
+The representative build job:
+
+* runs after plan/select succeeds;
+* runs on a GPU partition by default when `RUN_GPU_BUILD=1`;
+* passes `build-hdf5 --base-point-manifest ... --pgf-backend cupy --require-pgf-backend cupy`;
+* writes live JSONL progress to `progress/build_representative_sample.progress.jsonl`;
+* prints flushed progress lines so `tail -f logs/*<GPU_BUILD_JOBID>*` shows movement;
 * writes easy/moderate/hard/problematic classification in the summary.
 
 Generated representative calibration outputs are under:
@@ -161,7 +173,9 @@ results/o2_representative_calibration/<run_id>/
 results/tailbin_o2_representative_calibration_<run_id>.tgz
 ```
 
-The selected HDF5 build uses the backend configured in `examples/local34_diag_v1_k10000_1k.yaml`, currently `pgf_backend: batched`, so the representative build itself is CPU-based. `RUN_GPU_AUDIT=1` remains a separate GPU health/correctness check.
+`RUN_GPU_AUDIT=1` is only a separate GPU health/correctness audit. `RUN_GPU_BUILD=1` is what makes the representative HDF5 build request a GPU node and use the CuPy backend. The checked-in scientific config remains `pgf_backend: batched`; the O2 workflow applies the CuPy backend as a run-time override and fails before expensive work if the effective backend is not CuPy.
+
+After the 1-point `easy_smoke` succeeds and the summary shows real GPU progress, run `stratified_probe` with 8 points. Do not run the 40-point `representative_sample` until the 1-point GPU easy smoke is reviewed.
 
 ## Python Environment
 
@@ -244,8 +258,9 @@ GPU_CONSTRAINT="" bash scripts/o2/submit_smoke_audit.sh
 * `submit_resource_calibration.sh`: submits the CPU resource calibration job, optionally submits a current GPU audit job, and submits a dependent resource-calibration collector.
 * `resource_calibration.sbatch`: runs bounded estimate/plan/shard-plan/tiny-build commands with `/usr/bin/time -v`.
 * `collect_resource_calibration.sbatch`: collects current calibration logs, accounting, GPU audit artifacts when present, and writes `results/tailbin_o2_resource_calibration_<run_id>.tgz`.
-* `submit_representative_calibration.sh`: submits a full-plan, representative-sample Grid B calibration workflow and collector.
-* `representative_calibration.sbatch`: runs full Grid B plan/shard-plan, representative sample selection, selected sample build, and summary generation.
+* `submit_representative_calibration.sh`: submits staged Grid B plan/select, representative build, optional GPU audit, and collector jobs.
+* `representative_calibration.sbatch`: runs CPU-only full Grid B plan and ordered sample selection; shard planning is optional with `CAL_RUN_SHARD_PLAN=1`.
+* `representative_build.sbatch`: runs the selected representative HDF5 build, using CuPy/GPU when `RUN_GPU_BUILD=1`, with live progress logging.
 * `collect_representative_calibration.sbatch`: collects current representative calibration logs/artifacts, accounting, optional current GPU audit output, and writes `results/tailbin_o2_representative_calibration_<run_id>.tgz`.
 * `submit_production_pilot.sh`: placeholder only; it does not submit production until calibration results are reviewed.
 
