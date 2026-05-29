@@ -54,3 +54,4 @@ Codex may edit files when asked, but commits should be made only after explicit 
 
 * [O2 Runbook](O2_RUNBOOK.md): O2-specific execution, resource-request, monitoring, and SLURM guidance.
 * [O2 Resource Calibration](O2_RESOURCE_CALIBRATION.md): Measurement-driven workflow for choosing memory, CPU, GPU, and wall-time requests.
+* [Iteration Handoff Template](ITERATION_HANDOFF_TEMPLATE.md): Standard information to send back from O2 and standard structure for ChatGPT-to-Codex implementation prompts.
