@@ -19,14 +19,16 @@ export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
-export PYTHONPATH="${PWD}/src${PYTHONPATH:+:$PYTHONPATH}"
 
-if command -v module >/dev/null 2>&1; then
-  module load gcc/9.2.0
-  module load cuda/11.7
-else
-  echo "module command not found; assuming CUDA environment is already configured"
+if ! command -v module >/dev/null 2>&1; then
+  echo "ERROR: module command not found. This job must run on O2 with environment modules available." >&2
+  exit 2
 fi
+
+module purge
+module load gcc/14.2.0
+module load cuda/11.7
+module load python/3.13.1
 
 RESULT_DIR="results/o2_gpu_audit"
 GPU_MONITOR_PID=""
@@ -44,12 +46,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-PYTHON_BIN="python3"
-if [ -f /home/jae37/pythonEnv_3.10.11/bin/activate ]; then
-  # shellcheck disable=SC1091
-  source /home/jae37/pythonEnv_3.10.11/bin/activate
-  PYTHON_BIN="python"
+if [ ! -f .venv_o2/bin/activate ]; then
+  echo "Missing .venv_o2. First run: bash scripts/o2/submit_setup_env.sh" >&2
+  exit 2
 fi
+
+# shellcheck disable=SC1091
+source .venv_o2/bin/activate
+
+python - <<'PY'
+import sys
+if sys.version_info < (3, 10):
+    raise SystemExit(f"ERROR: .venv_o2 Python must be >=3.10, got {sys.version.split()[0]}")
+PY
 
 AUDIT_SCRIPT="${GPU_AUDIT_SCRIPT:-examples/gpu_backend_audit.py}"
 GPU_CONFIG="${GPU_AUDIT_CONFIG:-examples/kmax20_o2_gpu_probe.yaml}"
@@ -64,7 +73,10 @@ fi
   echo "Host: $(hostname)"
   echo "Started: $(date)"
   echo "Git commit: $(git rev-parse HEAD 2>/dev/null || echo unknown)"
-  echo "Python: $("$PYTHON_BIN" --version 2>&1)"
+  echo "Loaded modules:"
+  module list 2>&1
+  echo "Python path: $(which python)"
+  echo "Python version: $(python --version 2>&1)"
   echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
   echo "Audit script: $AUDIT_SCRIPT"
   echo "Reference GPU config: $GPU_CONFIG"
@@ -82,6 +94,6 @@ fi
 # as the matching GPU probe config for review.
 echo
 echo "Running GPU backend audit"
-"$PYTHON_BIN" -u "$AUDIT_SCRIPT" | tee "$RESULT_DIR/gpu_backend_audit.json"
+python -u "$AUDIT_SCRIPT" | tee "$RESULT_DIR/gpu_backend_audit.json"
 
 echo "Finished: $(date)" | tee -a "$RESULT_DIR/gpu_audit_metadata.txt"

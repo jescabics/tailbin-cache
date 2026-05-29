@@ -7,6 +7,11 @@ cd "$repo_root"
 
 mkdir -p logs outputs results tasks
 
+if [ ! -f .venv_o2/bin/activate ]; then
+  echo "Missing .venv_o2. First run: bash scripts/o2/submit_setup_env.sh" >&2
+  exit 2
+fi
+
 git_commit="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 
 CPU_PARTITION="${CPU_PARTITION:-short}"

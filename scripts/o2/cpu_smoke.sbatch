@@ -17,19 +17,29 @@ export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
-export PYTHONPATH="${PWD}/src${PYTHONPATH:+:$PYTHONPATH}"
 
-PYTHON_BIN="python3"
-if [ -f /home/jae37/pythonEnv_3.10.11/bin/activate ]; then
-  # shellcheck disable=SC1091
-  source /home/jae37/pythonEnv_3.10.11/bin/activate
-  PYTHON_BIN="python"
+if ! command -v module >/dev/null 2>&1; then
+  echo "ERROR: module command not found. This job must run on O2 with environment modules available." >&2
+  exit 2
 fi
 
-TAILBIN_CMD=(tailbin-cache)
-if ! command -v tailbin-cache >/dev/null 2>&1; then
-  TAILBIN_CMD=("$PYTHON_BIN" -m tailbin_cache.cli)
+module purge
+module load gcc/14.2.0
+module load python/3.13.1
+
+if [ ! -f .venv_o2/bin/activate ]; then
+  echo "Missing .venv_o2. First run: bash scripts/o2/submit_setup_env.sh" >&2
+  exit 2
 fi
+
+# shellcheck disable=SC1091
+source .venv_o2/bin/activate
+
+python - <<'PY'
+import sys
+if sys.version_info < (3, 10):
+    raise SystemExit(f"ERROR: .venv_o2 Python must be >=3.10, got {sys.version.split()[0]}")
+PY
 
 CONFIG="${CPU_SMOKE_CONFIG:-examples/kmax2000_cpu_smoke.yaml}"
 RESULT_DIR="results/o2_smoke"
@@ -45,21 +55,24 @@ fi
   echo "Host: $(hostname)"
   echo "Started: $(date)"
   echo "Git commit: $(git rev-parse HEAD 2>/dev/null || echo unknown)"
-  echo "Python: $("$PYTHON_BIN" --version 2>&1)"
+  echo "Loaded modules:"
+  module list 2>&1
+  echo "Python path: $(which python)"
+  echo "Python version: $(python --version 2>&1)"
   echo "Config: $CONFIG"
   echo "SLURM_CPUS_PER_TASK: ${SLURM_CPUS_PER_TASK:-unset}"
 } | tee "$RESULT_DIR/cpu_smoke_metadata.txt"
 
 echo
-echo "tailbin-cache --help"
-"${TAILBIN_CMD[@]}" --help
+echo "python -m tailbin_cache.cli --help"
+python -m tailbin_cache.cli --help
 
 echo
 echo "Running CPU smoke estimate"
-"${TAILBIN_CMD[@]}" estimate --config "$CONFIG" | tee "$RESULT_DIR/cpu_smoke_estimate.json"
+python -m tailbin_cache.cli estimate --config "$CONFIG" | tee "$RESULT_DIR/cpu_smoke_estimate.json"
 
 echo
 echo "Running tiny CPU smoke plan with --limit-bundles 1"
-"${TAILBIN_CMD[@]}" plan --config "$CONFIG" --output-dir "$PLAN_DIR" --limit-bundles 1 | tee "$RESULT_DIR/cpu_smoke_plan_summary.json"
+python -m tailbin_cache.cli plan --config "$CONFIG" --output-dir "$PLAN_DIR" --limit-bundles 1 | tee "$RESULT_DIR/cpu_smoke_plan_summary.json"
 
 echo "Finished: $(date)" | tee -a "$RESULT_DIR/cpu_smoke_metadata.txt"
