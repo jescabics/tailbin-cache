@@ -25,6 +25,7 @@ GPU_MEM="${GPU_MEM:-16G}"
 GPU_CPUS="${GPU_CPUS:-4}"
 GPU_GRES="${GPU_GRES:-gpu:1}"
 GPU_CONSTRAINT="${GPU_CONSTRAINT-gpu_doublep}"
+CUDA_MODULE="${CUDA_MODULE-cuda/12.8}"
 
 COLLECT_PARTITION="${COLLECT_PARTITION:-short}"
 COLLECT_TIME="${COLLECT_TIME:-0:30:00}"
@@ -62,7 +63,7 @@ gpu_args=(
   --gres="$GPU_GRES"
   --output=logs/%x_%j.out
   --error=logs/%x_%j.err
-  --export="ALL,GPU_AUDIT_SCRIPT=${GPU_AUDIT_SCRIPT},GPU_AUDIT_CONFIG=${GPU_AUDIT_CONFIG}"
+  --export="ALL,GPU_AUDIT_SCRIPT=${GPU_AUDIT_SCRIPT},GPU_AUDIT_CONFIG=${GPU_AUDIT_CONFIG},CUDA_MODULE=${CUDA_MODULE}"
 )
 if [ -n "$GPU_CONSTRAINT" ]; then
   gpu_args+=(--constraint="$GPU_CONSTRAINT")

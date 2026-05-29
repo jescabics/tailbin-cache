@@ -30,6 +30,27 @@ module purge
 module load gcc/14.2.0
 module load python/3.13.1
 
+INSTALL_GPU_DEPS="${INSTALL_GPU_DEPS:-0}"
+CUDA_MODULE="${CUDA_MODULE-cuda/12.8}"
+GPU_PIP_PACKAGE="${GPU_PIP_PACKAGE:-cupy-cuda12x}"
+
+if [ "$INSTALL_GPU_DEPS" = "1" ]; then
+  if [ -n "$CUDA_MODULE" ]; then
+    if ! module load "$CUDA_MODULE"; then
+      echo "ERROR: failed to load CUDA module: $CUDA_MODULE" >&2
+      echo "Run these discovery commands on O2:" >&2
+      echo "  module spider cuda" >&2
+      echo "  module load gcc/14.2.0" >&2
+      echo "  module avail cuda" >&2
+      exit 2
+    fi
+  else
+    echo "WARNING: INSTALL_GPU_DEPS=1 but CUDA_MODULE is empty; skipping CUDA module load."
+  fi
+else
+  echo "INSTALL_GPU_DEPS=0: GPU dependencies will be skipped."
+fi
+
 echo "Loaded modules:"
 module list 2>&1
 echo
@@ -75,6 +96,38 @@ python -m pip install --upgrade pip setuptools wheel
 echo
 echo "Installing Tailbin package editable"
 python -m pip install -e .
+
+if [ "$INSTALL_GPU_DEPS" = "1" ]; then
+  echo
+  echo "Installing optional GPU dependency: $GPU_PIP_PACKAGE"
+  python -m pip install "$GPU_PIP_PACKAGE"
+
+  echo
+  echo "CuPy import and runtime checks"
+  python - <<'PY'
+import cupy
+
+print(f"cupy: OK version={cupy.__version__}")
+try:
+    print(f"CUDA runtime version: {cupy.cuda.runtime.runtimeGetVersion()}")
+except Exception as exc:
+    print(f"CUDA runtime version unavailable: {exc}")
+try:
+    count = cupy.cuda.runtime.getDeviceCount()
+    print(f"CUDA device count: {count}")
+    if count:
+        props = cupy.cuda.runtime.getDeviceProperties(0)
+        name = props.get("name", b"unknown")
+        if isinstance(name, bytes):
+            name = name.decode("utf-8", errors="replace")
+        print(f"CUDA device 0: {name}")
+except Exception as exc:
+    print(f"CUDA device query unavailable: {exc}")
+PY
+else
+  echo
+  echo "Skipping CuPy install/import because INSTALL_GPU_DEPS=0."
+fi
 
 echo
 echo "Import and version checks"

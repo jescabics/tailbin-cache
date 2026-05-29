@@ -27,8 +27,21 @@ fi
 
 module purge
 module load gcc/14.2.0
-module load cuda/11.7
 module load python/3.13.1
+
+CUDA_MODULE="${CUDA_MODULE-cuda/12.8}"
+if [ -n "$CUDA_MODULE" ]; then
+  if ! module load "$CUDA_MODULE"; then
+    echo "ERROR: failed to load CUDA module: $CUDA_MODULE" >&2
+    echo "Run these discovery commands on O2:" >&2
+    echo "  module spider cuda" >&2
+    echo "  module load gcc/14.2.0" >&2
+    echo "  module avail cuda" >&2
+    exit 2
+  fi
+else
+  echo "WARNING: CUDA_MODULE is empty; skipping CUDA module load."
+fi
 
 RESULT_DIR="results/o2_gpu_audit"
 GPU_MONITOR_PID=""
@@ -73,6 +86,7 @@ fi
   echo "Host: $(hostname)"
   echo "Started: $(date)"
   echo "Git commit: $(git rev-parse HEAD 2>/dev/null || echo unknown)"
+  echo "CUDA module requested: ${CUDA_MODULE:-<none>}"
   echo "Loaded modules:"
   module list 2>&1
   echo "Python path: $(which python)"
