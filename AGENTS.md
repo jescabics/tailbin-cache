@@ -37,6 +37,8 @@ Repository rules:
 * For `src/` or `tests/` changes, Codex should report what changed and either ask before pushing or push only if the prompt explicitly says to push source/test changes.
 * O2 resource requests must be measurement-driven.
 * O2 scripts must use SLURM for heavy work and avoid login-node compute.
+* After smoke/audit is green, use resource calibration before production pilot decisions.
+* Prefer `/usr/bin/time -v` calibration output when `sacct MaxRSS` is missing or unreliable.
 
 Current O2 environment facts:
 

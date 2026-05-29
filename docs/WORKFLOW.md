@@ -23,6 +23,8 @@ This repository uses a split workflow for planning, implementation, cluster exec
 9. Bring the result bundle back to ChatGPT for analysis.
 10. Repeat.
 
+After smoke/audit is green, run O2 resource calibration before production. Smoke/audit proves the environment and CPU/GPU paths work; resource calibration measures runtime, memory, GPU behavior, and shard-planning shape so the first production pilot uses reviewed resource requests.
+
 ## Boundaries
 
 * ChatGPT does not receive passwords, SSH keys, Duo codes, cluster tokens, or private credentials.
@@ -45,6 +47,7 @@ The current preferred direction is:
 4. Instrument hard rows carefully.
 5. Benchmark CPU and GPU backends on O2.
 6. Use O2 result bundles to decide whether GPU acceleration, stronger certificates, or a new hard-row representation is needed.
+7. Use `/usr/bin/time -v` resource-calibration summaries when `sacct MaxRSS` is missing or unreliable for small jobs.
 
 ## Commit Policy
 

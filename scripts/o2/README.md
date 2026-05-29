@@ -73,6 +73,63 @@ Result bundles are intended to contain current-run logs only: CPU smoke logs, GP
 INCLUDE_ALL_LOGS=1 bash scripts/o2/submit_smoke_audit.sh
 ```
 
+## Resource Calibration Sequence
+
+Smoke/audit is a functional check: it proves the Python environment, CPU CLI, GPU backend, and SLURM dependency path work. Resource calibration is the next decision-making step before production.
+
+From the repository root on O2:
+
+```bash
+git pull
+bash scripts/o2/check_python_env.sh
+bash scripts/o2/submit_resource_calibration.sh
+squeue -u "$USER"
+```
+
+After the calibration and collector finish, inspect:
+
+```bash
+ls -lh results/tailbin_o2_resource_calibration_*.tgz
+less results/o2_resource_calibration/<run_id>/summary.md
+python -m json.tool results/o2_resource_calibration/<run_id>/summary.json | less
+```
+
+The calibration workflow runs small/moderate commands only:
+
+* `tailbin_cache.cli --help`
+* `estimate` on `examples/kmax2000_cpu_smoke.yaml`
+* `plan --limit-bundles 1` on `examples/kmax2000_cpu_smoke.yaml`
+* `estimate`, `plan`, and `plan-shards` on `examples/o2_resource_calibration.yaml`
+* a tiny `build-hdf5 --limit-base-points 1` under `results/o2_resource_calibration/<run_id>/build/`
+* a current GPU audit by default, unless `RUN_GPU_AUDIT=0` is set
+
+Each important CPU command is wrapped in `/usr/bin/time -v` because `sacct MaxRSS` can be empty or unreliable for small jobs. Timing files are written under:
+
+```bash
+results/o2_resource_calibration/<run_id>/timing/
+```
+
+The summary helper writes:
+
+```bash
+results/o2_resource_calibration/<run_id>/summary.md
+results/o2_resource_calibration/<run_id>/summary.json
+```
+
+Resource calibration overrides:
+
+```bash
+RUN_LABEL=first_calibration \
+CAL_PARTITION=short CAL_TIME=2:00:00 CAL_MEM=4G CAL_CPUS=1 \
+RUN_GPU_AUDIT=1 GPU_PARTITION=gpu_quad GPU_TIME=1:00:00 GPU_MEM=16G GPU_CPUS=4 \
+COLLECT_PARTITION=short COLLECT_TIME=0:30:00 COLLECT_MEM=1G COLLECT_CPUS=1 \
+bash scripts/o2/submit_resource_calibration.sh
+```
+
+Use `RUN_GPU_AUDIT=0` for CPU-only calibration. Do not start full production until `summary.md`, `summary.json`, accounting, and any GPU audit output have been reviewed.
+
+`scripts/o2/submit_production_pilot.sh` is currently a documented placeholder. It intentionally exits without submitting jobs until calibration determines safe pilot parameters.
+
 ## Python Environment
 
 The O2 environment is repo-local at `.venv_o2/` and ignored by Git.
@@ -151,6 +208,10 @@ GPU_CONSTRAINT="" bash scripts/o2/submit_smoke_audit.sh
 * `cpu_smoke.sbatch`: runs `python -m tailbin_cache.cli estimate` and a tiny `plan --limit-bundles 1` with `examples/kmax2000_cpu_smoke.yaml`.
 * `gpu_audit.sbatch`: loads `CUDA_MODULE` when set, starts the O2 GPU monitor if available, and runs `python -u examples/gpu_backend_audit.py`.
 * `collect_results.sbatch`: runs after both jobs with `afterany:<cpu_jobid>:<gpu_jobid>` and creates `results/tailbin_o2_smoke_audit_<timestamp>.tgz`.
+* `submit_resource_calibration.sh`: submits the CPU resource calibration job, optionally submits a current GPU audit job, and submits a dependent resource-calibration collector.
+* `resource_calibration.sbatch`: runs bounded estimate/plan/shard-plan/tiny-build commands with `/usr/bin/time -v`.
+* `collect_resource_calibration.sbatch`: collects current calibration logs, accounting, GPU audit artifacts when present, and writes `results/tailbin_o2_resource_calibration_<run_id>.tgz`.
+* `submit_production_pilot.sh`: placeholder only; it does not submit production until calibration results are reviewed.
 
 ## Outputs
 
@@ -161,7 +222,9 @@ Generated files stay in ignored project directories:
 * `outputs/o2_gpu_audit/`
 * `results/o2_smoke/`
 * `results/o2_gpu_audit/`
+* `results/o2_resource_calibration/`
 * `results/tailbin_o2_smoke_audit_<timestamp>.tgz`
+* `results/tailbin_o2_resource_calibration_<run_id>.tgz`
 
 The collector bundles current-run logs, selected outputs/results, O2 docs, example configs, git metadata, accounting output, and the GPU monitor log matching `GPU_JOB_ID` when present.
 
@@ -179,4 +242,4 @@ For example, from your laptop you can use `scp` with your normal O2 access metho
 
 ## Login Node Boundary
 
-Do not run heavy Tailbin planners, HDF5 builds, GPU audits, or production jobs directly on login nodes. Use `bash scripts/o2/submit_smoke_audit.sh` to submit work through SLURM.
+Do not run heavy Tailbin planners, HDF5 builds, GPU audits, resource calibration, or production jobs directly on login nodes. Use `bash scripts/o2/submit_smoke_audit.sh` or `bash scripts/o2/submit_resource_calibration.sh` to submit work through SLURM.

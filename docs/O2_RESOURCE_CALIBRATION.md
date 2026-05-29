@@ -27,6 +27,29 @@ Every substantial O2 workflow should follow this loop:
 7. Resubmit only failed, timed-out, or OUT_OF_MEMORY shards with a larger tier.
 8. Update the recommended tiers based on measured data.
 
+## Current Tailbin Calibration Command
+
+After smoke/audit passes, run the resource calibration workflow from the O2 repository root:
+
+```bash
+git pull
+bash scripts/o2/check_python_env.sh
+bash scripts/o2/submit_resource_calibration.sh
+squeue -u "$USER"
+```
+
+After completion, inspect:
+
+```bash
+results/o2_resource_calibration/<run_id>/summary.md
+results/o2_resource_calibration/<run_id>/summary.json
+results/tailbin_o2_resource_calibration_<run_id>.tgz
+```
+
+Smoke/audit is a functional check. Resource calibration is the next decision-making step: it measures small estimate/plan/shard-plan/tiny-build commands and, by default, submits a current GPU audit so GPU behavior can be reviewed beside CPU timing data.
+
+Do not launch full production until the calibration summary, accounting, logs, and GPU audit output have been reviewed.
+
 ## Shard Classes
 
 Tailbin jobs should be stratified whenever possible.
@@ -74,6 +97,18 @@ Useful commands include:
 O2_jobs_report
 O2sacct --help
 sacct -j <jobid> --format=JobId,NNodes,Partition,NCPUS,State,ReqMem,MaxRSS,Elapsed,CPUTime,TimeLimit,ExitCode,Start,End
+```
+
+Because `sacct MaxRSS` can be empty or unreliable for small jobs, Tailbin resource calibration also wraps important commands with:
+
+```bash
+/usr/bin/time -v
+```
+
+The timing output records elapsed wall time, maximum resident set size, exit status, and command metadata under:
+
+```bash
+results/o2_resource_calibration/<run_id>/timing/
 ```
 
 ## Resource Recommendation Rule

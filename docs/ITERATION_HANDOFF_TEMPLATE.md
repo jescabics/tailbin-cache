@@ -54,6 +54,16 @@ tar -tzf "$latest_bundle" | head -n 80
 
 8. Any failure messages from stdout/stderr.
 
+9. For resource calibration runs:
+
+```bash
+latest_cal="$(ls -td results/o2_resource_calibration/* 2>/dev/null | head -n 1)"
+echo "$latest_cal"
+cat "$latest_cal/summary.md"
+python -m json.tool "$latest_cal/summary.json" | head -n 160
+find "$latest_cal/timing" -type f | sort
+```
+
 ## What ChatGPT Should Analyze
 
 ChatGPT should classify each iteration into:
@@ -80,6 +90,7 @@ For each job, ChatGPT should extract:
 * whether wall-time was too high, too low, or reasonable;
 * whether CPU/GPU allocation matched actual work;
 * whether outputs and result bundles were produced.
+* for resource calibration, `/usr/bin/time -v` elapsed time and maximum resident set size for each timed command.
 
 ## Resource Calibration Rules
 
@@ -90,6 +101,8 @@ For each job, ChatGPT should extract:
 * Prefer arrays with concurrency limits over many manual one-off submissions.
 * Use dependencies for multi-stage workflows so the user does not need to manually wait and submit the next job.
 * Keep generated outputs, logs, HDF5 caches, and bundles out of Git.
+* Treat smoke/audit as a functional check and resource calibration as the resource-decision step before production pilot.
+* Prefer `/usr/bin/time -v` timing files when `sacct MaxRSS` is missing or unreliable.
 
 ## What Codex Needs In Each Prompt
 
