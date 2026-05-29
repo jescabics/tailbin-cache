@@ -50,6 +50,37 @@ Smoke/audit is a functional check. Resource calibration is the next decision-mak
 
 Do not launch full production until the calibration summary, accounting, logs, and GPU audit output have been reviewed.
 
+The next target-grid calibration order is:
+
+1. `local34_diag_v1_k10000_1k`
+2. `full100k_v1_k50000` preflight
+
+Run the local age-34 diagonal resource calibration first:
+
+```bash
+RUN_LABEL=local34_diag_v1_k10000_1k \
+CAL_CONFIG=examples/local34_diag_v1_k10000_1k.yaml \
+CAL_PLAN_LIMIT_BUNDLES=20 \
+CAL_SHARDS=8 \
+TINY_BUILD_LIMIT_BASE_POINTS=2 \
+RUN_GPU_AUDIT=1 \
+bash scripts/o2/submit_resource_calibration.sh
+```
+
+Then run the full target preflight, still as calibration only:
+
+```bash
+RUN_LABEL=full100k_v1_k50000_preflight \
+CAL_CONFIG=examples/full100k_v1_k50000.yaml \
+CAL_PLAN_LIMIT_BUNDLES=20 \
+CAL_SHARDS=16 \
+TINY_BUILD_LIMIT_BASE_POINTS=1 \
+RUN_GPU_AUDIT=1 \
+bash scripts/o2/submit_resource_calibration.sh
+```
+
+These commands estimate runtime, memory, shard balance, GPU behavior, and adaptive storage shape. They do not enable production.
+
 ## Shard Classes
 
 Tailbin jobs should be stratified whenever possible.
@@ -209,7 +240,7 @@ Production submissions should be staged:
 
 Each stage should produce a result bundle.
 
-Do not launch a full 10,000 or 100,000 point build until the smaller calibration and production samples show acceptable certification and resource efficiency.
+Do not launch a full target build until the smaller calibration and production samples show acceptable certification and resource efficiency.
 
 ## Result Bundle Requirements
 

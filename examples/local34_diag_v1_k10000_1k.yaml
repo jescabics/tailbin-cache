@@ -1,0 +1,57 @@
+target_grid_name: local34_diag_v1_k10000_1k
+description: Provisional age-34 diagonal resource-calibration grid. Do not launch production from this config.
+grid:
+  target_grid_name: local34_diag_v1_k10000_1k
+  R_values: [0.01, 0.12, 0.23, 0.34, 0.45, 0.56, 0.67, 0.78, 0.89, 1.0]
+  N_values: [10000, 27825.594022071243, 77426.36826811278, 215443.46900318822, 599484.2503189409, 1668100.537200059, 4641588.833612777, 12915496.650148827, 35938136.63804626, 100000000]
+  Tb_min: 0.0
+  Tb_max: 20.0
+  Tb_count: 10
+  depth_values: [90]
+  u: 20.0
+  lam: 1.0
+  ploidy_factor: 2.0
+  condition_on_survival: true
+  age_constraint_mode: exact
+  age_exact: 34.0
+  enforce_age_constraint: true
+  alphas: [0.05, 0.058538995686138975, 0.06853628031883595, 0.08024090035856697, 0.09394443439884113, 0.10998825680021057, 0.1287720418070694, 0.15076371999678687, 0.17651113509036337, 0.20665569151220547, 0.24194833267898122, 0.283268248059268, 0.33164477502323264, 0.38828304108831085, 0.45459398534539097, 0.532229506941571, 0.62312361621777, 0.729540613634067, 0.8541314966877565, 1.0]
+build:
+  Kmax: 10000
+  base_node_factor: 2.0
+  refine_node_factor: 4.0
+  base_alias_eta: 30.0
+  refine_alias_eta: 36.0
+  n_bins: 24
+  steps_per_time: 1.4
+  min_steps: 32
+  max_steps: 120
+  storage: int16
+  target_max_abs_z_error: 0.01
+  target_max_abs_cdf_error: 1.0e-5
+  clip_eps: 1.0e-12
+  z_clip: 7.05
+  pgf_backend: batched
+  batch_size: 128
+  compressed_npz: true
+  use_conjugate_symmetry: true
+  stable_pgf_fallback: true
+  stable_rk4_fallback_step_multiplier: 10.0
+  stable_rk4_fallback_max_steps: 2000
+  solve_ivp_fallback_node_cap: 4096
+  chernoff_tail_enabled: true
+  chernoff_prefix_threshold: 2048
+  max_refined_nodes: 262144
+  resume: true
+parallel:
+  n_jobs: 1
+refinement:
+  enabled: true
+  max_levels: 5
+  node_factor_growth: 1.6
+  alias_eta_growth: 4.0
+  n_bins_increment: 4
+  steps_growth: 1.25
+  max_steps_growth: 1.35
+  max_seconds_per_bundle: 1800
+  fail_on_uncertified: false

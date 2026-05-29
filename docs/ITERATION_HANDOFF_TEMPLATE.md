@@ -78,6 +78,12 @@ ChatGPT should classify each iteration into:
 
 For each job, ChatGPT should extract:
 
+* target grid name;
+* `Kmax`;
+* number of base parameter points;
+* number of alpha tables;
+* whether the age constraint is `<=` or exact equality;
+* whether `T` / `T_b` are integer-grid, linearly sampled, or paired diagonal values;
 * job ID;
 * job state and exit code;
 * partition;
@@ -109,6 +115,12 @@ For each job, ChatGPT should extract:
 Codex prompts should include:
 
 * current git commit hash;
+* target grid name;
+* `Kmax`;
+* number of base parameter points;
+* number of alpha tables;
+* age constraint mode, such as `T + T_b <= max_age` or `T + T_b = age_exact`;
+* whether `T` / `T_b` are integer-grid, linearly sampled, or paired diagonal values;
 * exact files it may edit;
 * exact files it must not edit;
 * summary of O2 results;
@@ -143,6 +155,9 @@ Goal: <one sentence goal>
 
 O2 evidence:
 <job ids, states, logs, accounting, result summary>
+
+Target grid:
+<name, Kmax, base point count, alpha table count, age constraint mode, T/T_b sampling>
 
 Resource conclusions:
 <memory/cpu/wall-time/GPU conclusions>

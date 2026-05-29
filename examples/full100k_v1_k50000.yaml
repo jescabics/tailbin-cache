@@ -1,0 +1,56 @@
+target_grid_name: full100k_v1_k50000
+description: Near-term full scientific production target. Do not launch production until resource calibration summaries are reviewed.
+grid:
+  target_grid_name: full100k_v1_k50000
+  R_values: [0.01, 0.11888888888888889, 0.22777777777777777, 0.33666666666666667, 0.44555555555555554, 0.5544444444444444, 0.6633333333333333, 0.7722222222222221, 0.8811111111111111, 0.99]
+  N_values: [10000, 27825.594022071243, 77426.36826811278, 215443.46900318822, 599484.2503189409, 1668100.537200059, 4641588.833612777, 12915496.650148827, 35938136.63804626, 100000000]
+  T_values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100]
+  Tb_values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100]
+  depth_values: [90]
+  u: 20.0
+  lam: 1.0
+  ploidy_factor: 2.0
+  condition_on_survival: true
+  age_constraint_mode: upper_bound
+  max_age: 100.0
+  enforce_age_constraint: true
+  alphas: [0.05, 0.058538995686138975, 0.06853628031883595, 0.08024090035856697, 0.09394443439884113, 0.10998825680021057, 0.1287720418070694, 0.15076371999678687, 0.17651113509036337, 0.20665569151220547, 0.24194833267898122, 0.283268248059268, 0.33164477502323264, 0.38828304108831085, 0.45459398534539097, 0.532229506941571, 0.62312361621777, 0.729540613634067, 0.8541314966877565, 1.0]
+build:
+  Kmax: 50000
+  base_node_factor: 2.0
+  refine_node_factor: 4.0
+  base_alias_eta: 30.0
+  refine_alias_eta: 36.0
+  n_bins: 24
+  steps_per_time: 1.4
+  min_steps: 32
+  max_steps: 120
+  storage: int16
+  target_max_abs_z_error: 0.01
+  target_max_abs_cdf_error: 1.0e-5
+  clip_eps: 1.0e-12
+  z_clip: 7.05
+  pgf_backend: batched
+  batch_size: 128
+  compressed_npz: true
+  use_conjugate_symmetry: true
+  stable_pgf_fallback: true
+  stable_rk4_fallback_step_multiplier: 10.0
+  stable_rk4_fallback_max_steps: 2000
+  solve_ivp_fallback_node_cap: 4096
+  chernoff_tail_enabled: true
+  chernoff_prefix_threshold: 2048
+  max_refined_nodes: 262144
+  resume: true
+parallel:
+  n_jobs: 1
+refinement:
+  enabled: true
+  max_levels: 5
+  node_factor_growth: 1.6
+  alias_eta_growth: 4.0
+  n_bins_increment: 4
+  steps_growth: 1.25
+  max_steps_growth: 1.35
+  max_seconds_per_bundle: 1800
+  fail_on_uncertified: false

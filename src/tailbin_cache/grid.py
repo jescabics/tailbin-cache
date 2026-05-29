@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from itertools import product
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 import json
 import math
 
@@ -98,20 +98,49 @@ class CacheGrid:
     condition_on_survival: bool = True
     max_age: float = 100.0
     enforce_age_constraint: bool = True
+    age_constraint_mode: str = "upper_bound"
+    age_exact: Optional[float] = None
+    paired_T_theta_values: Optional[Sequence[Tuple[float, float]]] = None
 
     def theta_is_valid_for_T(self, theta: float, T: float) -> bool:
-        """Return True if T + Tb <= max_age, where theta_f = u * Tb."""
-        if not bool(self.enforce_age_constraint):
+        """Return True if the age constraint accepts this T/theta_f pair."""
+        mode = str(self.age_constraint_mode or "upper_bound")
+        if not bool(self.enforce_age_constraint) and mode != "exact":
             return True
         if float(self.u) == 0.0:
             return float(theta) <= 0.0
         Tb = float(theta) / float(self.u)
-        return float(T) + Tb <= float(self.max_age) + 1e-12
+        total_age = float(T) + Tb
+        if mode == "none":
+            return True
+        if mode == "exact":
+            if self.age_exact is None:
+                raise ValueError("age_constraint_mode='exact' requires age_exact")
+            return abs(total_age - float(self.age_exact)) <= 1e-9
+        if mode == "upper_bound":
+            return total_age <= float(self.max_age) + 1e-12
+        raise ValueError(f"unknown age_constraint_mode {self.age_constraint_mode!r}")
 
     def valid_theta_values_for_T(self, T: float) -> List[float]:
+        if self.paired_T_theta_values is not None:
+            return [
+                float(theta)
+                for paired_T, theta in self.paired_T_theta_values
+                if abs(float(paired_T) - float(T)) <= 1e-9
+            ]
         return [float(theta) for theta in self.theta_values if self.theta_is_valid_for_T(float(theta), float(T))]
 
     def parameter_points(self) -> Iterator[ParameterPoint]:
+        if self.paired_T_theta_values is not None:
+            for R, N, depth, pair in product(self.R_values, self.N_values, self.depth_values, self.paired_T_theta_values):
+                T, theta = pair
+                if not self.theta_is_valid_for_T(float(theta), float(T)):
+                    continue
+                yield ParameterPoint(
+                    R=float(R), T=float(T), theta_f=float(theta), N=float(N), depth=int(depth),
+                    u=float(self.u), ploidy_factor=float(self.ploidy_factor), lam=float(self.lam), condition_on_survival=bool(self.condition_on_survival),
+                )
+            return
         for R, T, theta, N, depth in product(self.R_values, self.T_values, self.theta_values, self.N_values, self.depth_values):
             if not self.theta_is_valid_for_T(float(theta), float(T)):
                 continue
@@ -127,7 +156,7 @@ class CacheGrid:
 
     @property
     def n_parameter_points(self) -> int:
-        return len(list(self.parameter_points()))
+        return sum(1 for _ in self.parameter_points())
 
     @property
     def n_tables(self) -> int:
@@ -147,6 +176,12 @@ class CacheGrid:
             "condition_on_survival": bool(self.condition_on_survival),
             "max_age": float(self.max_age),
             "enforce_age_constraint": bool(self.enforce_age_constraint),
+            "age_constraint_mode": str(self.age_constraint_mode),
+            "age_exact": None if self.age_exact is None else float(self.age_exact),
+            "paired_T_theta_values": None if self.paired_T_theta_values is None else [
+                {"T": float(T), "theta_f": float(theta), "Tb": float(theta) / float(self.u) if float(self.u) != 0.0 else math.inf}
+                for T, theta in self.paired_T_theta_values
+            ],
         }
 
 
@@ -166,14 +201,56 @@ def grid_from_dict(cfg: Dict[str, Any]) -> CacheGrid:
             raise KeyError(f"Missing grid field {name} or {count_name}/{min_name}/{max_name}")
         return [float(x) for x in default]
 
+    def has_values_axis(name: str) -> bool:
+        count_name = name.replace("_values", "_count")
+        min_name = name.replace("_values", "_min")
+        max_name = name.replace("_values", "_max")
+        return name in g or (count_name in g and min_name in g and max_name in g)
+
     R_values = values("R_values", [0.01, 0.99], log=False)
-    T_values = values("T_values", [1.0, 100.0], log=False)
     u_val = float(g.get("u", 20.0))
-    if "Tb_values" in g or ("Tb_count" in g and "Tb_min" in g and "Tb_max" in g):
+
+    theta_sources = [
+        ("Tb_values", has_values_axis("Tb_values")),
+        ("theta_f_values", has_values_axis("theta_f_values")),
+        ("theta_values", has_values_axis("theta_values")),
+    ]
+    explicit_theta_sources = [name for name, present in theta_sources if present]
+    if len(explicit_theta_sources) > 1:
+        raise ValueError(
+            "Specify only one founder/background axis among Tb_values, theta_f_values, and theta_values; "
+            f"got {explicit_theta_sources}"
+        )
+
+    Tb_values: Optional[List[float]] = None
+    if has_values_axis("Tb_values"):
         Tb_values = values("Tb_values", [0.0], log=False)
         theta_values = [float(u_val) * float(tb) for tb in Tb_values]
+    elif has_values_axis("theta_f_values"):
+        theta_values = values("theta_f_values", [0.0, 100, 200, 300, 400, 500, 600, 1000, 2000], log=False)
+        Tb_values = [float(theta) / float(u_val) if float(u_val) != 0.0 else math.inf for theta in theta_values]
     else:
         theta_values = values("theta_values", [0.0, 100, 200, 300, 400, 500, 600, 1000, 2000], log=False)
+        Tb_values = [float(theta) / float(u_val) if float(u_val) != 0.0 else math.inf for theta in theta_values]
+
+    age_constraint_mode = str(g.get("age_constraint_mode", "upper_bound")).strip().lower()
+    if age_constraint_mode not in {"upper_bound", "exact", "none"}:
+        raise ValueError(f"unknown age_constraint_mode {age_constraint_mode!r}")
+    age_exact = None if g.get("age_exact", None) is None else float(g["age_exact"])
+
+    paired_T_theta_values: Optional[List[Tuple[float, float]]] = None
+    if age_constraint_mode == "exact":
+        if age_exact is None:
+            raise ValueError("age_constraint_mode='exact' requires age_exact")
+        if not explicit_theta_sources:
+            raise ValueError("age_constraint_mode='exact' requires Tb_values, theta_f_values, or theta_values")
+        if has_values_axis("T_values"):
+            raise ValueError("age_constraint_mode='exact' derives paired T values from age_exact and Tb/theta; do not also specify T_values")
+        paired_T_theta_values = [(float(age_exact) - float(tb), float(theta)) for tb, theta in zip(Tb_values or [], theta_values)]
+        T_values = [T for T, _theta in paired_T_theta_values]
+    else:
+        T_values = values("T_values", [1.0, 100.0], log=False)
+
     N_values = values("N_values", [1e4, 1e8], log=True)
 
     if "alphas" in g:
@@ -194,7 +271,10 @@ def grid_from_dict(cfg: Dict[str, Any]) -> CacheGrid:
         lam=float(g.get("lam", 1.0)),
         condition_on_survival=bool(g.get("condition_on_survival", True)),
         max_age=float(g.get("max_age", 100.0)),
-        enforce_age_constraint=bool(g.get("enforce_age_constraint", True)),
+        enforce_age_constraint=bool(g.get("enforce_age_constraint", age_constraint_mode != "none")),
+        age_constraint_mode=age_constraint_mode,
+        age_exact=age_exact,
+        paired_T_theta_values=paired_T_theta_values,
     )
 
 

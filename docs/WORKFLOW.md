@@ -23,7 +23,7 @@ This repository uses a split workflow for planning, implementation, cluster exec
 9. Bring the result bundle back to ChatGPT for analysis.
 10. Repeat.
 
-After smoke/audit is green, run O2 resource calibration before production. Smoke/audit proves the environment and CPU/GPU paths work; resource calibration measures runtime, memory, GPU behavior, and shard-planning shape so the first production pilot uses reviewed resource requests.
+After smoke/audit is green, run O2 resource calibration before production. Smoke/audit proves the environment and CPU/GPU paths work; resource calibration measures runtime, memory, GPU behavior, and shard-planning shape so the first production pilot uses reviewed resource requests. The next cluster steps should be resource calibration for `local34_diag_v1_k10000_1k`, followed by resource calibration/preflight for `full100k_v1_k50000`.
 
 ## Boundaries
 
@@ -62,4 +62,4 @@ Codex may run lightweight local checks when dependencies already exist and the u
 * [O2 Runbook](O2_RUNBOOK.md): O2-specific execution, resource-request, monitoring, and SLURM guidance.
 * [O2 Resource Calibration](O2_RESOURCE_CALIBRATION.md): Measurement-driven workflow for choosing memory, CPU, GPU, and wall-time requests.
 * [Iteration Handoff Template](ITERATION_HANDOFF_TEMPLATE.md): Standard information to send back from O2 and standard structure for ChatGPT-to-Codex implementation prompts.
-* [Production Target Grid](PRODUCTION_TARGET_GRID.md): Current smoke, calibration, production-template, and provisional pilot grid definitions.
+* [Production Target Grids](PRODUCTION_TARGET_GRID.md): Named scientific target grids, parser semantics, exact axes, counts, and O2 calibration commands.
