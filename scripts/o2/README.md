@@ -130,6 +130,39 @@ Use `RUN_GPU_AUDIT=0` for CPU-only calibration. Do not start full production unt
 
 `scripts/o2/submit_production_pilot.sh` is currently a documented placeholder. It intentionally exits without submitting jobs until calibration determines safe pilot parameters.
 
+## Representative Grid B Calibration
+
+For the named `local34_diag_v1_k10000_1k` target, do not use a two-base-point build as serious calibration. Use the representative workflow:
+
+```bash
+RUN_LABEL=local34_diag_v1_k10000_1k_representative \
+CAL_CONFIG=examples/local34_diag_v1_k10000_1k.yaml \
+CAL_FULL_PLAN=1 \
+CAL_SHARDS=8 \
+CAL_BUILD_SAMPLE_BASE_POINTS=40 \
+CAL_BUILD_SAMPLE_STRATEGY=representative_hard \
+RUN_GPU_AUDIT=1 \
+bash scripts/o2/submit_representative_calibration.sh
+```
+
+This submits a CPU calibration job, an optional GPU audit job, and a dependent collector. The CPU calibration job:
+
+* plans all Grid B base points and alpha tables;
+* writes the full adaptive plan and balanced shard plan;
+* selects a deterministic representative sample, not the first N rows;
+* writes `sample/selected_base_points.csv` and `sample/selected_base_points.json`;
+* builds only the selected base points via `build-hdf5 --base-point-manifest`;
+* writes easy/moderate/hard/problematic classification in the summary.
+
+Generated representative calibration outputs are under:
+
+```bash
+results/o2_representative_calibration/<run_id>/
+results/tailbin_o2_representative_calibration_<run_id>.tgz
+```
+
+The selected HDF5 build uses the backend configured in `examples/local34_diag_v1_k10000_1k.yaml`, currently `pgf_backend: batched`, so the representative build itself is CPU-based. `RUN_GPU_AUDIT=1` remains a separate GPU health/correctness check.
+
 ## Python Environment
 
 The O2 environment is repo-local at `.venv_o2/` and ignored by Git.
@@ -211,6 +244,9 @@ GPU_CONSTRAINT="" bash scripts/o2/submit_smoke_audit.sh
 * `submit_resource_calibration.sh`: submits the CPU resource calibration job, optionally submits a current GPU audit job, and submits a dependent resource-calibration collector.
 * `resource_calibration.sbatch`: runs bounded estimate/plan/shard-plan/tiny-build commands with `/usr/bin/time -v`.
 * `collect_resource_calibration.sbatch`: collects current calibration logs, accounting, GPU audit artifacts when present, and writes `results/tailbin_o2_resource_calibration_<run_id>.tgz`.
+* `submit_representative_calibration.sh`: submits a full-plan, representative-sample Grid B calibration workflow and collector.
+* `representative_calibration.sbatch`: runs full Grid B plan/shard-plan, representative sample selection, selected sample build, and summary generation.
+* `collect_representative_calibration.sbatch`: collects current representative calibration logs/artifacts, accounting, optional current GPU audit output, and writes `results/tailbin_o2_representative_calibration_<run_id>.tgz`.
 * `submit_production_pilot.sh`: placeholder only; it does not submit production until calibration results are reviewed.
 
 ## Outputs
@@ -223,8 +259,10 @@ Generated files stay in ignored project directories:
 * `results/o2_smoke/`
 * `results/o2_gpu_audit/`
 * `results/o2_resource_calibration/`
+* `results/o2_representative_calibration/`
 * `results/tailbin_o2_smoke_audit_<timestamp>.tgz`
 * `results/tailbin_o2_resource_calibration_<run_id>.tgz`
+* `results/tailbin_o2_representative_calibration_<run_id>.tgz`
 
 The collector bundles current-run logs, selected outputs/results, O2 docs, example configs, git metadata, accounting output, and the GPU monitor log matching `GPU_JOB_ID` when present.
 

@@ -55,17 +55,22 @@ The next target-grid calibration order is:
 1. `local34_diag_v1_k10000_1k`
 2. `full100k_v1_k50000` preflight
 
-Run the local age-34 diagonal resource calibration first:
+Do not use a two-point build as the serious Grid B calibration. A two-point build is only a smoke test; it cannot reveal which age-34 diagonal regimes are easy, hard, slow, memory-heavy, or certification-problematic.
+
+Run the local age-34 diagonal representative calibration first:
 
 ```bash
-RUN_LABEL=local34_diag_v1_k10000_1k \
+RUN_LABEL=local34_diag_v1_k10000_1k_representative \
 CAL_CONFIG=examples/local34_diag_v1_k10000_1k.yaml \
-CAL_PLAN_LIMIT_BUNDLES=20 \
+CAL_FULL_PLAN=1 \
 CAL_SHARDS=8 \
-TINY_BUILD_LIMIT_BASE_POINTS=2 \
+CAL_BUILD_SAMPLE_BASE_POINTS=40 \
+CAL_BUILD_SAMPLE_STRATEGY=representative_hard \
 RUN_GPU_AUDIT=1 \
-bash scripts/o2/submit_resource_calibration.sh
+bash scripts/o2/submit_representative_calibration.sh
 ```
+
+This workflow plans all 1,000 Grid B base points and all 20,000 alpha tables, selects a deterministic representative 40-base-point sample, builds only that selected sample, classifies selected points as easy/moderate/hard/problematic, and bundles the current-run logs and artifacts.
 
 Then run the full target preflight, still as calibration only:
 
@@ -79,7 +84,9 @@ RUN_GPU_AUDIT=1 \
 bash scripts/o2/submit_resource_calibration.sh
 ```
 
-These commands estimate runtime, memory, shard balance, GPU behavior, and adaptive storage shape. They do not enable production.
+These commands estimate runtime, memory, shard balance, GPU behavior, and adaptive storage shape. They do not enable production, and full Grid A production remains disabled until the Grid B representative calibration summary has been reviewed.
+
+Representative selection includes low/median/high planner work proxies, low/high `R`, low/high `N`, `T_b = 0`, `T_b = 20`, intermediate `T_b` values, and planner-predicted full or large-prefix points when available. Selection is deterministic and writes both CSV and JSON manifests.
 
 ## Shard Classes
 
@@ -211,6 +218,8 @@ Short jobs should be grouped when practical so each array task runs at least rou
 ## GPU Guidance
 
 GPU resources should be requested only when the code actually uses the GPU backend.
+
+For `local34_diag_v1_k10000_1k`, the representative HDF5 build uses the config value `pgf_backend: batched`, so it is CPU-based. `RUN_GPU_AUDIT=1` is a separate health/correctness check. The HDF5 builder can use the CuPy path only when the build config explicitly sets `pgf_backend: cupy`; do not assume production HDF5 builds are GPU-accelerated from the audit alone.
 
 GPU audit jobs must report:
 

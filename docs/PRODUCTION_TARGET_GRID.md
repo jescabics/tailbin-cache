@@ -193,17 +193,20 @@ T_b = 20.0000000000, T = 14.0000000000, theta_f = 400.0000000000
 
 Run resource calibration only. Do not run full production.
 
-First run the local age-34 diagonal pilot:
+First run the local age-34 diagonal representative calibration. This replaces the older two-point smoke-style build; the workflow plans all 1,000 Grid B base points, selects a deterministic representative 40-base-point sample, and builds only that selected sample.
 
 ```bash
-RUN_LABEL=local34_diag_v1_k10000_1k \
+RUN_LABEL=local34_diag_v1_k10000_1k_representative \
 CAL_CONFIG=examples/local34_diag_v1_k10000_1k.yaml \
-CAL_PLAN_LIMIT_BUNDLES=20 \
+CAL_FULL_PLAN=1 \
 CAL_SHARDS=8 \
-TINY_BUILD_LIMIT_BASE_POINTS=2 \
+CAL_BUILD_SAMPLE_BASE_POINTS=40 \
+CAL_BUILD_SAMPLE_STRATEGY=representative_hard \
 RUN_GPU_AUDIT=1 \
-bash scripts/o2/submit_resource_calibration.sh
+bash scripts/o2/submit_representative_calibration.sh
 ```
+
+Representative selection includes predicted easiest, median, and hardest work-proxy points; low/high `R`; low/high `N`; `T_b = 0`; `T_b = 20`; intermediate `T_b` values; and planner-predicted full or large-prefix points when available. The selected base points are written to `sample/selected_base_points.csv` and `sample/selected_base_points.json`.
 
 Then run the full target preflight:
 
@@ -217,7 +220,9 @@ RUN_GPU_AUDIT=1 \
 bash scripts/o2/submit_resource_calibration.sh
 ```
 
-Review both calibration summaries before creating any production submission workflow.
+Review both calibration summaries before creating any production submission workflow. Full Grid A production remains disabled until the Grid B representative calibration is reviewed.
+
+The representative Grid B HDF5 build uses `pgf_backend: batched` from `examples/local34_diag_v1_k10000_1k.yaml`, so it is CPU-based. `RUN_GPU_AUDIT=1` remains a separate GPU health/correctness check.
 
 ## Relationship To Older Templates
 

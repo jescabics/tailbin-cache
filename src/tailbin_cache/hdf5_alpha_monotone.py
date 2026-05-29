@@ -87,6 +87,29 @@ def _bundle_key_base(point: ParameterPoint) -> Tuple[float, float, float, int, f
     return (float(point.R), float(point.T), float(point.N), int(point.depth), float(point.u), float(point.ploidy_factor), float(point.lam), bool(point.condition_on_survival))
 
 
+def _read_base_point_manifest(path: str | Path) -> set[int]:
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"base point manifest not found: {p}")
+    if p.suffix.lower() == ".json":
+        data = json.loads(p.read_text())
+        if isinstance(data, dict):
+            rows = data.get("selected_base_points", [])
+        elif isinstance(data, list):
+            rows = data
+        else:
+            rows = []
+        return {int(row["base_idx"]) for row in rows}
+    out: set[int] = set()
+    with p.open("r", newline="") as f:
+        reader = csv.DictReader(f)
+        if "base_idx" not in (reader.fieldnames or []):
+            raise ValueError(f"base point manifest must include a base_idx column: {p}")
+        for row in reader:
+            out.add(int(float(row["base_idx"])))
+    return out
+
+
 def build_alpha_monotone_hdf5_from_config(
     config_path: str | Path,
     output_path: str | Path,
@@ -96,6 +119,7 @@ def build_alpha_monotone_hdf5_from_config(
     shard_index: int = 0,
     compression: str = "gzip",
     compression_opts: int = 4,
+    base_point_manifest: Optional[str | Path] = None,
 ) -> Dict[str, Any]:
     """Build an adaptive HDF5 cache by sharding over base points and scanning alphas.
 
@@ -112,7 +136,18 @@ def build_alpha_monotone_hdf5_from_config(
     if not (0 <= int(shard_index) < int(n_shards)):
         raise ValueError("shard_index must satisfy 0 <= shard_index < n_shards")
     all_base = _unique_base_points(grid)
-    base_points = [(i, bp) for i, bp in enumerate(all_base) if int(i) % int(n_shards) == int(shard_index)]
+    selected_base_indices: Optional[set[int]] = None
+    if base_point_manifest is not None:
+        selected_base_indices = _read_base_point_manifest(base_point_manifest)
+        missing = sorted(i for i in selected_base_indices if i < 0 or i >= len(all_base))
+        if missing:
+            raise ValueError(f"base point manifest contains out-of-range base_idx values: {missing[:10]}")
+    base_points = [
+        (i, bp)
+        for i, bp in enumerate(all_base)
+        if (selected_base_indices is None or int(i) in selected_base_indices)
+        and int(i) % int(n_shards) == int(shard_index)
+    ]
     if limit_base_points is not None:
         base_points = base_points[: int(limit_base_points)]
 
@@ -294,10 +329,16 @@ def build_alpha_monotone_hdf5_from_config(
         n_cert = int(h5.attrs.get("n_certified", 0))
         reps = np.asarray(h5["manifest/representation"], dtype=str) if n_tables else np.array([], dtype=str)
         statuses = np.asarray(h5["manifest/status"], dtype=str) if n_tables else np.array([], dtype=str)
+        z_err = np.asarray(h5["manifest/total_z_error_indicator"], dtype=float) if n_tables else np.array([], dtype=float)
+        cdf_err = np.asarray(h5["manifest/total_cdf_error_indicator"], dtype=float) if n_tables else np.array([], dtype=float)
         n_constant = int(np.sum(reps == "constant")) if n_tables else 0
         n_prop = int(np.sum(statuses == "certified_alpha_monotone_constant_right")) if n_tables else 0
         n_alias = int(np.sum(statuses == "certified_alpha_threshold_alias")) if n_tables else 0
         size_bytes = int(Path(output_path).stat().st_size)
+    seconds_per_base_point = [float(r["seconds"]) for r in rows]
+    expected_tables_for_attempted = int(
+        sum(len(grid.valid_theta_values_for_T(bp.T)) * len(grid.alphas) for _base_idx, bp in base_points)
+    )
     summary = {
         "format": "tailbin_alpha_monotone_hdf5_build_summary_v1_0",
         "config_path": str(config_path),
@@ -307,8 +348,11 @@ def build_alpha_monotone_hdf5_from_config(
         "error_budget": asdict(budget),
         "refinement_config": asdict(refinement_cfg),
         "sharding": {"mode": "base_point_modulo", "n_shards": int(n_shards), "shard_index": int(shard_index)},
+        "base_point_manifest": None if base_point_manifest is None else str(base_point_manifest),
+        "n_base_points_selected_by_manifest": None if selected_base_indices is None else int(len(selected_base_indices)),
         "n_base_points_expected_total": int(len(all_base)),
         "n_base_points_attempted": int(len(base_points)),
+        "n_tables_attempted": int(expected_tables_for_attempted),
         "n_tables_written": n_tables,
         "n_tables_certified": n_cert,
         "certified_fraction_written": float(n_cert / n_tables) if n_tables else 0.0,
@@ -318,7 +362,11 @@ def build_alpha_monotone_hdf5_from_config(
         "n_nonconstant_tables": int(n_tables - n_constant),
         "n_refinement_failures": int(sum(int(r.get("n_refinement_failures", 0)) for r in rows)),
         "elapsed_seconds": elapsed,
-        "mean_seconds_per_base_point": float(sum(r["seconds"] for r in rows) / len(rows)) if rows else None,
+        "mean_seconds_per_base_point": float(sum(seconds_per_base_point) / len(seconds_per_base_point)) if seconds_per_base_point else None,
+        "median_seconds_per_base_point": float(np.median(seconds_per_base_point)) if seconds_per_base_point else None,
+        "max_seconds_per_base_point": float(max(seconds_per_base_point)) if seconds_per_base_point else None,
+        "max_total_z_error_indicator": float(np.nanmax(z_err)) if z_err.size else None,
+        "max_total_cdf_error_indicator": float(np.nanmax(cdf_err)) if cdf_err.size else None,
         "output_bytes": size_bytes,
         "output_mb": float(size_bytes / 1e6),
         "base_rows": rows,

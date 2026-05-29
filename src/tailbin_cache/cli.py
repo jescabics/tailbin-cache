@@ -49,6 +49,15 @@ def main(argv=None) -> int:
     sp.add_argument("--shard-index", type=int, default=0)
     sp.add_argument("--compression", default="gzip")
     sp.add_argument("--compression-opts", type=int, default=4)
+    sp.add_argument("--base-point-manifest", default=None, help="CSV/JSON manifest of explicit base_idx values to build")
+
+    sp = sub.add_parser("select-representative", help="select representative base points from a full adaptive plan")
+    sp.add_argument("--config", required=True)
+    sp.add_argument("--plan-dir", required=True)
+    sp.add_argument("--output-csv", required=True)
+    sp.add_argument("--output-json", required=True)
+    sp.add_argument("--sample-size", type=int, default=40)
+    sp.add_argument("--strategy", default="representative_hard")
 
     sp = sub.add_parser("inspect-hdf5", help="inspect one table row from a generated HDF5 shard")
     sp.add_argument("path")
@@ -117,6 +126,7 @@ def main(argv=None) -> int:
             args.config, args.output, limit_base_points=args.limit_base_points,
             n_shards=args.n_shards, shard_index=args.shard_index,
             compression=args.compression, compression_opts=args.compression_opts,
+            base_point_manifest=args.base_point_manifest,
         )
         keys = [
             "n_base_points_attempted", "n_tables_written", "n_tables_certified", "certified_fraction_written",
@@ -124,6 +134,25 @@ def main(argv=None) -> int:
             "n_nonconstant_tables", "n_refinement_failures", "elapsed_seconds", "mean_seconds_per_base_point", "output_mb",
         ]
         _json_print({k: summary[k] for k in keys if k in summary})
+        return 0
+
+    if args.cmd == "select-representative":
+        from .representative import write_representative_manifest
+        summary = write_representative_manifest(
+            config_path=args.config,
+            plan_dir=args.plan_dir,
+            output_csv=args.output_csv,
+            output_json=args.output_json,
+            sample_size=args.sample_size,
+            strategy=args.strategy,
+        )
+        _json_print({
+            "sample_size_requested": summary["sample_size_requested"],
+            "sample_size_selected": summary["sample_size_selected"],
+            "strategy": summary["strategy"],
+            "output_csv": summary["output_csv"],
+            "output_json": summary["output_json"],
+        })
         return 0
 
     if args.cmd == "inspect-hdf5":
