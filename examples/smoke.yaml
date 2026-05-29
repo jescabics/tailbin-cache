@@ -1,0 +1,51 @@
+grid:
+  R_values:
+  - 0.9
+  T_values:
+  - 1
+  theta_values:
+  - 0
+  N_values:
+  - 10000.0
+  depth_values:
+  - 100
+  u: 20.0
+  ploidy_factor: 2.0
+  max_age: 100.0
+  enforce_age_constraint: true
+  n_alpha: 1
+  alpha_min: 0.05
+  alpha_max: 0.05
+build:
+  Kmax: 64
+  base_node_factor: 2.0
+  refine_node_factor: 4.0
+  base_alias_eta: 24.0
+  refine_alias_eta: 30.0
+  n_bins: 16
+  steps_per_time: 1.0
+  max_steps: 60
+  storage: int16
+  target_max_abs_z_error: 0.05
+  target_max_abs_cdf_error: 0.0001
+  pgf_backend: batched
+  batch_size: 64
+  compressed_npz: true
+  use_conjugate_symmetry: true
+  stable_pgf_fallback: true
+  stable_rk4_fallback_step_multiplier: 10.0
+  stable_rk4_fallback_max_steps: 2000
+  solve_ivp_fallback_node_cap: 4096
+  resume: true
+parallel:
+  n_jobs: 1
+refinement:
+  enabled: true
+  max_levels: 2
+  node_factor_growth: 1.5
+  alias_eta_growth: 4.0
+  n_bins_increment: 2
+  steps_growth: 1.15
+  max_steps_growth: 1.25
+  max_seconds_per_bundle: 300
+  fail_on_uncertified: false

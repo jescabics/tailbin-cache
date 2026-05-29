@@ -1,0 +1,33 @@
+R_values: [0.01, 0.745]
+T_values: [1, 10]
+N_values: [10000]
+depth_values: [90]
+theta_f_values: [0, 100, 600]
+alphas: [0.05, 0.1]
+max_age: 100
+enforce_age_constraint: true
+u: 20.0
+ploidy_factor: 2.0
+lam: 1.0
+condition_on_survival: true
+build:
+  Kmax: 2000
+  pgf_backend: batched
+  batch_size: 128
+  base_node_factor: 1.0
+  refine_node_factor: 2.0
+  base_alias_eta: 30.0
+  refine_alias_eta: 36.0
+  n_bins: 24
+  min_steps: 32
+  max_steps: 120
+  steps_per_time: 1.4
+  target_max_abs_z_error: 0.01
+  target_max_abs_cdf_error: 1.0e-5
+  clip_eps: 1.0e-12
+  z_clip: 7.05
+  chernoff_tail_enabled: true
+  chernoff_prefix_threshold: 512
+  stable_pgf_fallback: true
+parallel:
+  n_jobs: 1

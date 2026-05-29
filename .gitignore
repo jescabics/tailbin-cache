@@ -216,3 +216,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Tailbin generated/import artifacts
+incoming/
+logs/
+outputs/
+results/
+tasks/
+*.h5
+*.hdf5
+*.npz
+*.tgz
+*.tar.gz
+*.gpulog

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tailbin-cache-builder"
+version = "1.4.0"
+description = "Optimized exact/GPU-ready cache builder for certified tail-bin CDF/z lookup tables"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.23",
+    "scipy>=1.10",
+    "PyYAML>=6.0",
+    "h5py>=3.8",
+    "numba>=0.58",
+]
+
+[project.scripts]
+tailbin-cache = "tailbin_cache.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
